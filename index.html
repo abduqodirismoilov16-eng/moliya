@@ -182,6 +182,15 @@ select.inp{appearance:none}
 .keys button.ok{background:var(--pri-grad);box-shadow:var(--pri-glow);color:#fff;border:0}
 .keys button:active{transform:scale(.95)}
 .wrapli .t,.wrapli .s{white-space:normal;overflow:visible;text-overflow:clip}
+#lock{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;justify-content:space-between;align-items:center;padding:calc(64px + env(safe-area-inset-top)) 28px calc(34px + env(safe-area-inset-bottom));background:var(--hero);color:#fff;animation:fade .2s}
+#lock.out{opacity:0;transition:opacity .2s}
+.lk-top{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lk-t{font-size:22px;font-weight:800;margin-top:8px}.lk-s{font-size:14px;opacity:.8;min-height:20px;text-align:center}.lk-s.bad{color:#FFB4BD;opacity:1}
+.lk-dots{display:flex;gap:16px;margin-top:22px}.lk-dots i{width:14px;height:14px;border-radius:7px;border:2px solid rgba(255,255,255,.7);transition:background .15s}.lk-dots i.on{background:#fff;border-color:#fff}
+.lk-keys{display:grid;grid-template-columns:repeat(3,76px);gap:18px 30px}
+.lk-keys button{width:76px;height:76px;border-radius:38px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:30px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.lk-keys button:active{background:rgba(255,255,255,.28);transform:scale(.94)}
+.lk-keys button[data-k=bio],.lk-keys button[data-k=del]{background:transparent}
 .qpill{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#0B1530;color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:600;z-index:60;display:none;max-width:calc(100% - 40px);box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .loading{display:flex;align-items:center;justify-content:center;min-height:70vh;flex-direction:column;gap:14px;color:var(--hdr);font-weight:600}
@@ -329,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '4.3';
+var VERSION = '4.4';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -409,7 +418,8 @@ var IC = {
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
   eyeoff: 'M3 3l18 18 M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2 M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6 M9.9 9.9a3 3 0 0 0 4.2 4.2',
   chart: 'M4 20V10 M10 20V4 M16 20v-7 M22 20H2', list: 'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
-  up2: 'M7 17L17 7 M9 7h8v8', dn2: 'M7 7l10 10 M17 9v8H9'
+  up2: 'M7 17L17 7 M9 7h8v8',
+  finger: 'M12 11v3a8 8 0 0 1-2 5 M8 11a4 4 0 0 1 8 0v1a12 12 0 0 1-1 5 M5 9a7 7 0 0 1 13-3 M4 14c.5-1 .9-2 1-3 M19 10c.3 1.6.3 3.3-.2 5 M12 21c1-1.3 1.8-2.7 2.3-4.3 M7.5 19.5A11 11 0 0 0 8 14v-3', dn2: 'M7 7l10 10 M17 9v8H9'
 };
 var GOAL_EMOJIS = ['🎯','🚗','🏠','🕋','✈️','💍','🎓','💻','📱','🏖️','👶','🛋️','🐑','💰','🏪','🎁'];
 var EMOJIS = ['🛒','🍽️','☕','🚕','🚗','⛽','🚌','✈️','🏠','💡','💧','📱','🌐','🏥','💊','👕','👟','💇','📚','🎓','🎁','🎉','🎮','🎬','⚽','🏋️','👶','🐾','👪','🇺🇿','🤲','🕌','💰','💵','💼','📈','🏦','💳','📩','📤','🔑','🔧','🧾','🐼','⭐','❤️','📝','📦'];
@@ -955,7 +965,12 @@ function vSettings() {
     row('xlsx', '', 'dl', 'Excel faylga eksport') +
     row('csv', '', 'dl', 'CSV faylga eksport') +
     row('import', '', 'ul', 'CSV dan import (Meyyor va boshqa)') + '</div>';
-  if (!tg) h += '<div class="label-up">Xavfsizlik</div><div class="glass list">' + row('logout', '', 'logout', 'Chiqish (PIN qayta so\'raladi)', '', true) + '</div>';
+  var lt = function (on) { return '<span class="toggle ' + (on ? 'on' : '') + '" role="switch" aria-checked="' + on + '"></span>'; };
+  if (!tg) h += '<div class="label-up">Xavfsizlik</div><div class="glass list">' +
+    row('lockTog', '', 'lock', 'Ilovani PIN bilan qulflash', lt(lockOn())) +
+    (BIO_OK && lockOn() ? row('bioTog', '', 'finger', 'Barmoq izi / yuz bilan ochish', lt(bioOn())) : '') +
+    row('logout', '', 'logout', 'Chiqish (PIN qayta so\'raladi)', '', true) + '</div>' +
+    (IN_GAS ? '<div class="muted small" style="margin:6px 6px 0">Barmoq izi va yuz bilan ochish faqat telefonga o\'rnatilgan "Moliya" ilovasida ishlaydi.</div>' : '');
   h += '<div class="muted small" style="text-align:center;margin:22px 0"><div style="margin-bottom:8px">' + logo(40) + '</div>Abduqodir · Moliya ' + VERSION + ' · ma\'lumotlar faqat sizning Google jadvalingizda</div>';
   return h + '</div>';
 }
@@ -1396,6 +1411,74 @@ function flushQueue() {
 window.addEventListener('online', function () { flushQueue(); });
 setInterval(flushQueue, 30000);
 
+/* ================= ILOVA QULFI: PIN, barmoq izi, yuz ================= */
+// Qulf faqat shu telefonda ishlaydi. Barmoq izi/yuzni telefonning o'zi tekshiradi (WebAuthn),
+// biometrik ma'lumot hech qayerga yuborilmaydi.
+var LOCK = { on: false, bio: false, hiddenAt: 0, wrong: 0, until: 0, entry: '' };
+function lockOn() { return store('moliya_lock') === '1' && !!store('moliya_pin') && !TG; }
+function bioOn() { return lockOn() && !!store('moliya_bio'); }
+function bioAvail() {
+  try { if (!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false); return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; }); } catch (e) { return Promise.resolve(false); }
+}
+var BIO_OK = false; bioAvail().then(function (v) { BIO_OK = v && !IN_GAS; if (D && S.sub === 'settings') render(); });
+function rnd(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+function b64(buf) { return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
+function unb64(s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); }
+function bioRegister() {
+  return navigator.credentials.create({ publicKey: {
+    challenge: rnd(32), rp: { name: 'Abduqodir · Moliya' },
+    user: { id: rnd(16), name: 'moliya', displayName: userName() || 'Moliya' },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }, timeout: 60000
+  } }).then(function (c) { store('moliya_bio', b64(c.rawId)); });
+}
+function bioCheck() {
+  return navigator.credentials.get({ publicKey: { challenge: rnd(32), allowCredentials: [{ type: 'public-key', id: unb64(store('moliya_bio')) }], userVerification: 'required', timeout: 60000 } });
+}
+function showLock() {
+  if (!lockOn() || $('#lock')) return;
+  LOCK.entry = '';
+  var n = String(store('moliya_pin')).length, el = document.createElement('div');
+  el.id = 'lock';
+  el.innerHTML = '<div class="lk-top">' + logo(64) + '<div class="lk-t">Abduqodir · Moliya</div><div class="lk-s" id="lkMsg">' + (bioOn() ? 'Barmoq izi, yuz yoki PIN bilan oching' : 'PIN kodni kiriting') + '</div>' +
+    '<div class="lk-dots" id="lkDots">' + new Array(n + 1).join('<i></i>') + '</div></div>' +
+    '<div class="lk-keys">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'bio', '0', 'del'].map(function (k) {
+      if (k === 'bio') return bioOn() ? '<button data-k="bio" aria-label="Barmoq izi yoki yuz">' + ic('finger', 28, 1.8) + '</button>' : '<span></span>';
+      if (k === 'del') return '<button data-k="del" aria-label="O\'chirish">' + ic('back', 24) + '</button>';
+      return '<button data-k="' + k + '">' + k + '</button>';
+    }).join('') + '</div>';
+  document.body.appendChild(el);
+  el.onclick = function (e) { var b = e.target.closest('button'); if (b) lockKey(b.dataset.k); };
+  if (bioOn()) setTimeout(lockBio, 350);
+}
+function lockMsg(t, bad) { var m = $('#lkMsg'); if (m) { m.textContent = t; m.className = 'lk-s' + (bad ? ' bad' : ''); } }
+function lockDots() { var d = document.querySelectorAll('#lkDots i'); d.forEach(function (x, i) { x.className = i < LOCK.entry.length ? 'on' : ''; }); }
+function lockKey(k) {
+  haptic();
+  if (k === 'bio') return lockBio();
+  if (Date.now() < LOCK.until) return lockMsg('Biroz kuting: ' + Math.ceil((LOCK.until - Date.now()) / 1000) + ' soniya', true);
+  if (k === 'del') { LOCK.entry = LOCK.entry.slice(0, -1); return lockDots(); }
+  var pin = String(store('moliya_pin'));
+  if (LOCK.entry.length >= pin.length) return;
+  LOCK.entry += k; lockDots();
+  if (LOCK.entry.length === pin.length) setTimeout(function () {
+    if (LOCK.entry === pin) return unlock();
+    LOCK.wrong++; LOCK.entry = ''; lockDots();
+    var d = $('#lkDots'); if (d) d.animate([{ transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'none' }], 260);
+    if (LOCK.wrong >= 5) { LOCK.until = Date.now() + 30000; LOCK.wrong = 0; lockMsg('5 marta xato. 30 soniyadan keyin urining', true); }
+    else lockMsg('PIN noto\'g\'ri', true);
+  }, 120);
+}
+function lockBio() {
+  if (!bioOn()) return;
+  bioCheck().then(unlock).catch(function () { lockMsg('Barmoq izi/yuz tasdiqlanmadi. PIN kiriting'); });
+}
+function unlock() { var l = $('#lock'); if (!l) return; LOCK.wrong = 0; l.classList.add('out'); setTimeout(function () { l.remove(); }, 220); haptic('medium'); }
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) LOCK.hiddenAt = Date.now();
+  else if (lockOn() && LOCK.hiddenAt && Date.now() - LOCK.hiddenAt > 60000) showLock();
+});
+
 /* ================= PASTKI OYNALAR (sheet) ================= */
 function sheet(html) { $('#panel').innerHTML = '<div class="grab"></div>' + html; $('#sheet').classList.add('open'); syncBack(); }
 function closeSheet() { $('#sheet').classList.remove('open'); syncBack(); }
@@ -1658,6 +1741,15 @@ var act = {
   baseCur: function () { sheet('<h3>Asosiy valyuta</h3><div class="muted small" style="margin-bottom:10px">Umumiy balans va statistika shu valyutada ko\'rsatiladi.</div><div class="glass list">' + Object.keys(CUR).map(function (c) { return '<button class="li" data-a="setBase" data-v="' + c + '"><span class="orb o40 b' + (base() === c ? ' pri' : '') + '">' + CUR[c] + '</span><span class="mid"><div class="t">' + c + '</div></span>' + (base() === c ? ic('check', 18) : '') + '</button>'; }).join('') + '</div>'); },
   setBase: function (c) { D.settings.asosiy_valyuta = c; closeSheet(); render(); api('saveSettings', { asosiy_valyuta: c }); },
   theme: function () { sheet('<h3>Mavzu</h3><div class="glass list">' + Object.keys(THEMES).map(function (k) { var on = (setv('mavzu') || 'tizim') === k; return '<button class="li" data-a="setTheme" data-v="' + k + '"><span class="orb o40' + (on ? ' pri' : '') + '">' + ic(THEMES[k][0], 18) + '</span><span class="mid"><div class="t">' + THEMES[k][1] + '</div>' + (k === 'tizim' ? '<div class="s">Telefon sozlamasiga qarab o\'zi almashadi</div>' : '') + '</span>' + (on ? ic('check', 18) : '') + '</button>'; }).join('') + '</div>'); },
+  lockTog: function () {
+    if (lockOn()) { store('moliya_lock', null); store('moliya_bio', null); toast('Qulf o\'chirildi'); }
+    else { store('moliya_lock', '1'); toast('Endi ilova har ochilganda PIN so\'raydi'); }
+    render();
+  },
+  bioTog: function () {
+    if (bioOn()) { store('moliya_bio', null); toast('Barmoq izi/yuz o\'chirildi'); return render(); }
+    bioRegister().then(function () { toast('Barmoq izi/yuz yoqildi'); render(); }).catch(function (e) { toast('Yoqilmadi: telefonda ekran qulfi (barmoq izi yoki yuz) sozlanganini tekshiring', 4500); });
+  },
   hideAmt: function () { S.hide = !S.hide; try { localStorage.setItem('moliya_hide', S.hide ? '1' : '0'); } catch (e) {} haptic(); render(); toast(S.hide ? 'Summalar yashirildi' : 'Summalar ko\'rsatildi', 1400); },
   flipTheme: function () { var order = ['tizim', 'yorug', 'tungi'], n = order[(order.indexOf(setv('mavzu') || 'tizim') + 1) % 3]; act.setTheme(n); toast('Mavzu: ' + THEMES[n][1], 1500); },
   setTheme: function (v) { D.settings.mavzu = v; applyTheme(); closeSheet(); render(); api('saveSettings', { mavzu: v }); },
@@ -1670,7 +1762,7 @@ var act = {
   import: function () { importSheet(); },
   pickFile: function () { var f = $('#fileIn'); f.value = ''; f.onchange = function () { var file = f.files[0]; if (!file) return; var r = new FileReader(); r.onload = function () { try { var rows = mapImport(parseCSV(r.result)); if (!rows.length) throw new Error('Mos qatorlar topilmadi'); importSheet(rows); } catch (e) { importSheet(null, e.message); } }; r.readAsText(file, 'utf-8'); }; f.click(); },
   doImport: function (v, el) { el.disabled = true; el.textContent = 'Import qilinmoqda…'; api('importRows', window._imp).then(function (d) { closeSheet(); set(d); toast(d.imported + ' ta amal import qilindi ✓', 4000); }).catch(function () { el.disabled = false; }); },
-  logout: function () { ask('Chiqasizmi? Keyingi safar PIN so\'raladi.').then(function () { store('moliya_pin', null); store('moliya_cache', null); D = null; showPin(false); }); }
+  logout: function () { ask('Chiqasizmi? Keyingi safar PIN so\'raladi.').then(function () { store('moliya_pin', null); store('moliya_cache', null); store('moliya_lock', null); store('moliya_bio', null); D = null; showPin(false); }); }
 };
 
 document.addEventListener('click', function (e) {
@@ -1713,6 +1805,7 @@ if (window.matchMedia) try { matchMedia('(prefers-color-scheme: dark)').addEvent
 
 // Keshdan darhol ko'rsatish, keyin serverdan yangilash
 (function start() {
+  if (lockOn()) showLock();
   var c = store('moliya_cache');
   if (c && (TG || store('moliya_pin'))) { try { D = JSON.parse(c); applyTheme(); render(); } catch (e) {} }
   updQ();
