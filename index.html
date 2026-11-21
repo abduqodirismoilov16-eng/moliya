@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '4.4';
+var VERSION = '4.5';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -1473,9 +1473,12 @@ function lockBio() {
   if (!bioOn()) return;
   bioCheck().then(unlock).catch(function () { lockMsg('Barmoq izi/yuz tasdiqlanmadi. PIN kiriting'); });
 }
-function unlock() { var l = $('#lock'); if (!l) return; LOCK.wrong = 0; l.classList.add('out'); setTimeout(function () { l.remove(); }, 220); haptic('medium'); }
+function unlock() { var l = $('#lock'); if (!l) return; LOCK.wrong = 0; store('moliya_seen', String(Date.now())); l.classList.add('out'); setTimeout(function () { l.remove(); }, 220); haptic('medium'); }
+// Ochiq turgan ilova yangilansa (obnavit), 1 daqiqa ichida qayta kod so'ralmaydi
+function lockSeen() { if (lockOn() && !$('#lock')) store('moliya_seen', String(Date.now())); }
+window.addEventListener('pagehide', lockSeen); window.addEventListener('beforeunload', lockSeen);
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden) LOCK.hiddenAt = Date.now();
+  if (document.hidden) { LOCK.hiddenAt = Date.now(); lockSeen(); }
   else if (lockOn() && LOCK.hiddenAt && Date.now() - LOCK.hiddenAt > 60000) showLock();
 });
 
@@ -1805,7 +1808,7 @@ if (window.matchMedia) try { matchMedia('(prefers-color-scheme: dark)').addEvent
 
 // Keshdan darhol ko'rsatish, keyin serverdan yangilash
 (function start() {
-  if (lockOn()) showLock();
+  if (lockOn() && !(Date.now() - Number(store('moliya_seen') || 0) < 60000)) showLock();
   var c = store('moliya_cache');
   if (c && (TG || store('moliya_pin'))) { try { D = JSON.parse(c); applyTheme(); render(); } catch (e) {} }
   updQ();
