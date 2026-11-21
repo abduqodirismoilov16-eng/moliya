@@ -1,5 +1,5 @@
 // Moliya ilovasi: fayllarni telefonda saqlab, internetsiz ochilishini ta'minlaydi
-var CACHE = 'moliya-4.4';
+var CACHE = 'moliya-4.5';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
