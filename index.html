@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '5.0';
+var VERSION = '5.1';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -347,6 +347,7 @@ if (TG) { try { TG.ready(); TG.expand(); TG.BackButton.onClick(function () { bac
 
 /* ---------------- Belgilar (SVG) ---------------- */
 var IC = {
+  brief: 'M3 8h18v12H3z M8 8V5h8v3 M3 13h18', scale: 'M12 4v16 M7 20h10 M5 7h14 M5 7l-3 7h6z M19 7l-3 7h6z', broom: 'M14 4l-4 9 M6 13h8l2 7H4z',
   cash: 'M2 7h20v10H2z M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0 M6 12h.01 M18 12h.01',
   card: 'M3 6h18v12H3z M3 10h18 M7 15h3',
   dollar: 'M12 3v18 M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6',
@@ -601,7 +602,9 @@ var THEMES = { tizim: ['auto', "Tizim bo'yicha"], yorug: ['sun', "Yorug'"], tung
 
 /* ---------------- Hisob-kitoblar ---------------- */
 function accById(id) { return D.accounts.find(function (a) { return a.id === id; }) || { id: id, nomi: "O'chirilgan hisob", valyuta: 'UZS', belgi: 'wallet', guruh: '' }; }
-function catById(id) { return D.categories.find(function (c) { return c.id === id; }) || { id: id, nomi: 'Kategoriyasiz', belgi: 'box', turi: 'chiqim' }; }
+var VCAT = { __biz_in: { id: '__biz_in', nomi: 'Biznesdan olindi', belgi: 'brief', turi: 'kirim' }, __biz_out: { id: '__biz_out', nomi: 'Biznesga berildi', belgi: 'brief', turi: 'chiqim' }, __fix: { id: '__fix', nomi: 'Tuzatish (solishtirish)', belgi: 'scale', turi: 'chiqim' } };
+function catById(id) { return D.categories.find(function (c) { return c.id === id; }) || VCAT[id] || { id: id, nomi: 'Kategoriyasiz', belgi: 'box', turi: 'chiqim' }; }
+function isOther(t) { var c = D.categories.find(function (x) { return x.id === t.kategoriya; }); return !c || /boshqa/i.test(c.nomi); }
 function isActive(a) { return a.faol === '' || a.faol === undefined || truthy(a.faol); }
 function inTotal(a) { return isActive(a) && (a.jamiga === '' || a.jamiga === undefined || truthy(a.jamiga)); }
 function activeAccs() { return D.accounts.filter(isActive).sort(function (a, b) { return (a.tartib || 99) - (b.tartib || 99); }); }
@@ -621,15 +624,59 @@ function balances() {
 }
 function totalBalance() { var b = balances(), tot = 0; activeAccs().filter(inTotal).forEach(function (a) { tot += conv(b[a.id] || 0, a.valyuta); }); return tot; }
 function txIn(m) { return D.transactions.filter(function (t) { return t.sana.slice(0, 7) === m; }); }
-function txVal(t) { return conv(Number(t.summa) || 0, accById(t.hisob).valyuta); }
+// Amal qiymati asosiy valyutada. Saqlangan kurs bo'lsa (5.1+), tarix o'sha kun kursi bilan hisoblanadi
+function txVal(t) { var c = accById(t.hisob).valyuta, n = Number(t.summa) || 0; if (c !== 'UZS' && Number(t.kurs) > 0) return conv(n * Number(t.kurs), 'UZS'); return conv(n, c); }
+
+/* ---------- Shaxsiy va biznes (5.1) ---------- */
+// Shaxsiy hisob: "jamiga" belgisi yoqilgan. O'chirilganlari biznes (yoki boshqa odamning puli)
+function isPers(a) { return a.jamiga === '' || a.jamiga === undefined || truthy(a.jamiga); }
+// Shaxsiy statistikadagi ko'rinishi: biznes ichidagi amallar kirmaydi,
+// biznesdan shaxsiyga o'tkazma = kirim ("Biznesdan olindi"), aksi = chiqim ("Biznesga berildi")
+function ptx(t) {
+  var a = accById(t.hisob);
+  if (t.turi !== 'otkazma') return isPers(a) ? t : null;
+  var pa = isPers(a), pb = isPers(accById(t.hisobga));
+  if (pa === pb) return null;
+  if (pb) return Object.assign({}, t, { turi: 'kirim', hisob: t.hisobga, summa: Number(t.summa2) > 0 ? Number(t.summa2) : Number(t.summa), kategoriya: '__biz_in', kurs: '', _x: 1 });
+  return Object.assign({}, t, { turi: 'chiqim', kategoriya: '__biz_out', _x: 1 });
+}
+// Statistika: tuzatish (solishtirish) amallari kirim/chiqim hisoblanmaydi, faqat balansni to'g'rilaydi
+function pIn(m) { var r = []; txIn(m).forEach(function (t) { var x = ptx(t); if (x && x.kategoriya !== '__fix') r.push(x); }); return r; }
+function pDelta(t) { var x = ptx(t); return x ? (x.turi === 'kirim' ? 1 : -1) * txVal(x) : 0; }
+function bizGroups() { var g = {}; D.accounts.forEach(function (a) { var k = a.guruh || 'Shaxsiy'; g[k] = g[k] || { pers: 0, biz: 0 }; if (isPers(a)) g[k].pers++; else g[k].biz++; }); return g; }
+// Sof boylik = shaxsiy hisoblardagi pul + sizga qaytariladigan qarzlar − siz qaytaradigan qarzlar
+function persCash() { var b = balances(), t = 0; D.accounts.forEach(function (a) { if (isPers(a)) t += conv(b[a.id] || 0, a.valyuta); }); return t; }
+function netWorth() { var d = debtTotals(); return persCash() + (d.berdim || 0) - (d.oldim || 0); }
+function hasDebts() { return (D.debts || []).some(debtOpen); }
+// d sanasi oxiridagi sof boylik (grafik va oylik o'zgarish uchun)
+function nwSeries(days) {
+  var net = {}, now = netWorth(), out = [], t0 = Date.now();
+  D.transactions.forEach(function (t) { var v = pDelta(t); if (v) net[t.sana] = (net[t.sana] || 0) + v; });
+  var pay = {}; (D.payments || []).forEach(function (p) { (pay[p.qarz] = pay[p.qarz] || []).push(p); });
+  (D.debts || []).forEach(function (d) {
+    // qarz olingan kuni: qarz +, kassaga tushgan pul alohida amal bo'lib yozilgan; shuning uchun sof boylik o'zgarmaydi.
+    // To'lov kuni: qarz kamayadi (+), pul chiqimi alohida yozilgan (−). Bu yerda faqat qarz tomonini qo'shamiz.
+    var sg = d.turi === 'oldim' ? 1 : -1, ps = pay[d.id] || [];
+    if (!debtOpen(d) && !ps.length) return;
+    ps.forEach(function (p) { net[p.sana] = (net[p.sana] || 0) + sg * conv(Number(p.summa) || 0, d.valyuta || 'UZS'); });
+    net[d.sana] = (net[d.sana] || 0) - sg * conv(Number(d.summa) || 0, d.valyuta || 'UZS');
+  });
+  var v = now; out.unshift(v);
+  for (var i = 0; i < days - 1; i++) { v -= net[ymd(new Date(t0 - i * 864e5))] || 0; out.unshift(v); }
+  return out;
+}
+function nwMonthChange() {
+  var net = 0, m = ym(new Date()), d0 = m + '-01';
+  var s = nwSeries(new Date().getDate() + 1); return s[s.length - 1] - s[0];
+}
 function sums(m) {
   var r = { inc: 0, exp: 0 };
-  txIn(m).forEach(function (t) { if (t.turi === 'kirim') r.inc += txVal(t); else if (t.turi === 'chiqim') r.exp += txVal(t); });
+  pIn(m).forEach(function (t) { if (t.turi === 'kirim') r.inc += txVal(t); else if (t.turi === 'chiqim') r.exp += txVal(t); });
   return r;
 }
 function byCat(m, type) {
   var r = {};
-  txIn(m).forEach(function (t) { if (t.turi === type) r[t.kategoriya] = (r[t.kategoriya] || 0) + txVal(t); });
+  pIn(m).forEach(function (t) { if (t.turi === type) r[t.kategoriya] = (r[t.kategoriya] || 0) + txVal(t); });
   return r;
 }
 function sortTx(list) { return list.slice().sort(function (a, b) { return a.sana < b.sana ? 1 : a.sana > b.sana ? -1 : (String(a.yaratilgan) < String(b.yaratilgan) ? 1 : -1); }); }
@@ -684,7 +731,8 @@ function back() {
   if (S.sub === 'cats') { S.sub = 'settings'; return render(); }
   if (S.sub === 'history' && S.accBack) { S.accBack = false; S.hacc = ''; S.sub = 'acc'; return render(); }
   if ((S.sub === 'debts' || (!S.sub && S.tab === 'budget' && S.plan === 'debt')) && S.debtArch) { S.debtArch = false; return render(); }
-  if (S.sub) { S.sub = null; return render(); }
+  if (S.sub === 'review' && R && R.step > 1) { R.step--; return render(); }
+  if (S.sub) { S.sub = null; R = null; return render(); }
   if (S.tab !== 'home') return go('home');
 }
 function canBack() { return !!(S.sub || S.tab !== 'home' || $('#add').classList.contains('open') || $('#sheet').classList.contains('open')); }
@@ -708,7 +756,7 @@ try { if (GH) google.script.history.setChangeHandler(hbPop); else window.addEven
 
 function render() {
   if (!D) return;
-  var v = S.sub ? ({ history: vHistory, settings: vSettings, cats: vCats, debts: vDebts, acc: vAcc })[S.sub]() : ({ home: vHome, accounts: vAccounts, stats: vStats, budget: vBudget })[S.tab]();
+  var v = S.sub ? ({ history: vHistory, settings: vSettings, cats: vCats, debts: vDebts, acc: vAcc, review: vReview })[S.sub]() : ({ home: vHome, accounts: vAccounts, stats: vStats, budget: vBudget })[S.tab]();
   $('#app').innerHTML = curWrap(v);
   renderTabs(); syncBack(); afterRender();
 }
@@ -762,14 +810,13 @@ function greet() { var h = new Date().getHours(); return h < 5 ? 'Xayrli tun' : 
 function userName() { return setv('ism') || (TG && TG.initDataUnsafe && TG.initDataUnsafe.user ? TG.initDataUnsafe.user.first_name : ''); }
 
 function vHome() {
-  var m = ym(new Date()), s = sums(m), tot = totalBalance(), b = base();
-  var alt = b === 'UZS' ? '≈ ' + fmt(conv(tot, 'UZS', 'USD'), 'USD', { noDec: true }) : '≈ ' + short(conv(tot, b, 'UZS'), 'UZS') + " so'm";
+  var m = ym(new Date()), s = sums(m), tot = netWorth(), b = base(), dt = debtTotals(), cash = persCash();
   var ins = insight(), fc = forecast(m), nm = userName();
-  var start = tot - (s.inc - s.exp), pct = start > 0 && D.transactions.length ? (tot - start) / start * 100 : null;
+  var mch = D.transactions.length ? nwMonthChange() : null;
   var h = '<div class="hdr"><div class="row" style="gap:11px"><button class="avatar" data-a="sub" data-v="settings" aria-label="Sozlamalar" style="background:none;padding:0">' + logo(44) + '</button><div><div class="sub b">' + greet() + '</div><div style="font-size:19px;font-weight:800;letter-spacing:-.4px">' + esc(nm || 'Moliya') + '</div></div></div>' +
     '<div class="row" style="gap:8px"><button class="orb o44" data-a="hideAmt" aria-label="Summalarni yashirish">' + ic(S.hide ? 'eyeoff' : 'eye', 19) + '</button><button class="orb o44" data-a="flipTheme" aria-label="Mavzuni almashtirish">' + ic(THEMES[setv('mavzu') || 'tizim'][0], 19) + '</button></div></div>';
-  h += '<div class="wrap"><div class="hero"><div class="between"><span class="lbl">Umumiy balans</span>' + (pct !== null && !S.hide ? '<span class="tag">' + ic(pct >= 0 ? 'up2' : 'dn2', 13, 2.6) + ' ' + (pct >= 0 ? '+' : '−') + Math.abs(pct).toFixed(1).replace('.', ',') + '% bu oy</span>' : '') + '</div>' +
-    '<div class="big" data-count="' + tot + '" data-cur="' + b + '">' + fmt(tot, b) + '</div><div class="lbl">' + alt + ' · ' + activeAccs().filter(inTotal).length + ' ta hisob</div>' +
+  h += '<div class="wrap"><div class="hero" data-a="nwInfo" style="cursor:pointer"><div class="between"><span class="lbl">Sof boylik · shaxsiy</span>' + (mch !== null && Math.round(mch) && !S.hide ? '<span class="tag">' + ic(mch >= 0 ? 'up2' : 'dn2', 13, 2.6) + ' ' + (mch >= 0 ? '+' : '−') + short(Math.abs(mch)) + ' bu oy</span>' : '') + '</div>' +
+    '<div class="big" data-count="' + Math.round(tot) + '" data-cur="' + b + '">' + fmt(tot, b) + '</div><div class="lbl">Pul ' + short(cash) + (dt.oldim ? ' · Qarzlar −' + short(dt.oldim) : '') + (dt.berdim ? ' · Sizga qarz +' + short(dt.berdim) : '') + '</div>' +
     '<div style="margin:8px -20px 0">' + spark(tot) + '</div>' +
     '<div class="row" style="gap:10px;margin-top:2px"><div class="pill"><div class="lbl small row" style="gap:5px">' + ic('dn2', 13, 2.6) + MONTHS[new Date().getMonth()] + ' kirim</div><div class="xb" style="font-size:17px;margin-top:2px">+' + short(s.inc) + '</div></div>' +
     '<div class="pill"><div class="lbl small row" style="gap:5px">' + ic('up2', 13, 2.6) + MONTHS[new Date().getMonth()] + ' chiqim</div><div class="xb" style="font-size:17px;margin-top:2px">−' + short(s.exp) + '</div></div></div></div>';
@@ -780,6 +827,9 @@ function vHome() {
   var slides = [], x;
   if (ins) slides.push('<div class="glass card row" style="align-items:flex-start"><span class="orb o40" style="' + (ins.warn ? 'background:rgba(196,43,60,.1);color:var(--red)' : '') + '">' + ic(ins.warn ? 'alert' : 'spark', 18) + '</span><div style="min-width:0"><div class="b">' + esc(ins.t) + '</div><div class="muted" style="margin-top:2px">' + esc(ins.s) + '</div></div></div>');
   var keep = h; h = '';
+  var bg = bizGroups(), sugBiz = Object.keys(bg).filter(function (g) { return g !== 'Shaxsiy' && bg[g].pers && !bg[g].biz; });
+  if (sugBiz.length && !truthy(setv('biznes_sozlandi'))) slides.unshift('<button class="glass card row" data-a="bizSetup" style="width:100%;text-align:left;align-items:flex-start;border:1px solid var(--glass-b)"><span class="orb o40 dark">' + ic('brief', 18) + '</span><span style="min-width:0"><span class="b">Biznes pulini ajratamizmi?</span><div class="muted" style="margin-top:2px">' + esc(sugBiz.join(', ')) + ' kassalari shaxsiy statistikaga aralashmasin. Bir bosishda.</div></span></button>');
+  if (reviewDue()) slides.unshift('<button class="glass card row" data-a="reviewStart" style="width:100%;text-align:left;align-items:flex-start;border:1px solid var(--glass-b)"><span class="orb o40" style="background:var(--pri,#2148C9);color:#fff">' + ic('scale', 18) + '</span><span style="min-width:0"><span class="b">Haftalik ko\'rik · 5 daqiqa</span><div class="muted" style="margin-top:2px">' + (lastReview() ? 'O\'tgan safar: ' + dayLabel(lastReview().sana) : 'Birinchi ko\'rik') + '. Naqdni sanash, "Boshqa"ni tozalash, bitta qaror.</div></span></button>');
   var due = dueRec(3);
   if (due.length) h += '<div class="glass card" style="margin-top:2px"><div class="between" style="margin-bottom:4px"><span class="row" style="gap:10px"><span class="orb o40 dark">' + ic('repeat', 18) + '</span><span class="b">Yaqin to\'lovlar</span></span><button class="link" data-a="planGo" data-v="rec">Hammasi</button></div>' +
     due.slice(0, 3).map(function (r) { return '<div class="li"><span class="mid"><div class="t">' + esc(r.nomi) + '</div><div class="s ' + (r.keyingi < today() ? 'exp' : '') + '">' + dueLabel(r.keyingi) + ' · ' + fmt(r.summa, accById(r.hisob).valyuta) + '</div></span><button class="chip btn-pri" style="height:34px" data-a="recPay" data-v="' + r.id + '">To\'lash</button></div>'; }).join('') + '</div>';
@@ -808,7 +858,7 @@ function vHome() {
   if (!recent.length) return h + '<div class="glass card empty" style="margin-top:18px">Hali amal yo\'q.<br>Pastdagi <b>+</b> tugmasini bosing.</div></div>';
   h += '<div class="sec-title" style="margin-bottom:0"><span>Oxirgi amallar</span><button class="link" data-a="sub" data-v="history">Hammasi</button></div>';
   h += days.map(function (g, k) {
-    var inc = 0, exp = 0; txIn(g.d.slice(0, 7)).forEach(function (t) { if (t.sana !== g.d) return; if (t.turi === 'kirim') inc += txVal(t); else if (t.turi === 'chiqim') exp += txVal(t); });
+    var inc = 0, exp = 0; pIn(g.d.slice(0, 7)).forEach(function (t) { if (t.sana !== g.d) return; if (t.turi === 'kirim') inc += txVal(t); else if (t.turi === 'chiqim') exp += txVal(t); });
     return '<div class="dayh"><b>' + dayLabel(g.d) + '</b>' + '<span>' + [exp ? '−' + short(exp) : '', inc ? '+' + short(inc) : ''].filter(String).join(' · ') + '</span>' + '</div>' +
       '<div class="glass list">' + g.l.map(function (t) { return txRow(t); }).join('') + '</div>';
   }).join('');
@@ -819,34 +869,46 @@ function spark(tot, accId) {
   var net = {}, n = 30, t0 = Date.now();
   D.transactions.forEach(function (t) {
     if (accId) { var d = accDelta(t, accId); if (d) net[t.sana] = (net[t.sana] || 0) + d; return; }
-    var a = accById(t.hisob); if (!inTotal(a)) return;
-    if (t.turi === 'kirim') net[t.sana] = (net[t.sana] || 0) + txVal(t); else if (t.turi === 'chiqim') net[t.sana] = (net[t.sana] || 0) - txVal(t);
   });
   var pts = [tot];
-  for (var i = 0; i < n - 1; i++) pts.unshift(pts[0] - (net[ymd(new Date(t0 - i * 864e5))] || 0));
+  if (!accId) pts = nwSeries(n);
+  else for (var i = 0; i < n - 1; i++) pts.unshift(pts[0] - (net[ymd(new Date(t0 - i * 864e5))] || 0));
   var mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), r = mx - mn || 1;
   var xy = pts.map(function (v, i) { return (i * 300 / (n - 1)).toFixed(1) + ' ' + (50 - (v - mn) / r * 40).toFixed(1); });
   return '<svg width="100%" height="54" viewBox="0 0 300 54" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path d="M' + xy.join(' L') + ' L300 54 L0 54Z" fill="url(#spg)"/><path d="M' + xy.join(' L') + '" fill="none" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
 }
 
 function vAccounts() {
-  var b = balances(), groups = {}, order = [], pos = 0, neg = 0;
+  var b = balances(), groups = {}, order = [], pos = 0, neg = 0, bizOrder = [];
   activeAccs().forEach(function (a) {
     var g = a.guruh || 'Shaxsiy';
-    if (!groups[g]) { groups[g] = []; order.push(g); }
+    if (!isPers(a)) { g = '\u0001' + g; }
+    if (!groups[g]) { groups[g] = []; (isPers(a) ? order : bizOrder).push(g); }
     groups[g].push(a);
     if (!inTotal(a)) return;
     var v = conv(b[a.id] || 0, a.valyuta); if (v >= 0) pos += v; else neg += v;
   });
   var inactive = D.accounts.filter(function (a) { return !isActive(a); });
   var h = '<div class="hdr"><h1>Hisoblar</h1><div class="row" style="gap:10px"><button class="orb o44" data-a="quick" data-v="otkazma" aria-label="O\'tkazma">' + ic('swap') + '</button><button class="orb o44 dark" data-a="editAcc" aria-label="Yangi hisob">' + ic('plus', 20, 2.4) + '</button></div></div><div class="wrap">';
-  h += '<div class="hero" style="padding:16px 20px"><div class="lbl">Umumiy balans · ' + activeAccs().filter(inTotal).length + ' ta hisob</div><div class="big" style="font-size:30px">' + fmt(pos + neg) + '</div></div>';
+  h += '<div class="hero" style="padding:16px 20px"><div class="lbl">Shaxsiy pul · ' + activeAccs().filter(inTotal).length + ' ta hisob</div><div class="big" style="font-size:30px">' + fmt(pos + neg) + '</div>' + (hasDebts() ? '<div class="lbl">Qarzlar ayirilgandagi sof boylik: ' + fmt(netWorth()) + '</div>' : '') + '</div>';
   h += '<div class="grid2" style="margin-top:12px"><div class="glass card" style="margin:0"><div class="muted small">Ijobiy qoldiq</div><div class="xb inc" style="font-size:18px">' + short(pos) + '</div></div><div class="glass card" style="margin:0"><div class="muted small">Minusdagi hisoblar</div><div class="xb ' + (neg < 0 ? 'exp' : '') + '" style="font-size:18px">' + short(neg) + '</div></div></div>';
   order.forEach(function (g) {
     var tot = 0; groups[g].forEach(function (a) { tot += conv(b[a.id] || 0, a.valyuta); });
     h += '<div class="label-up between"><span>' + esc(g) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div><div class="glass list">' +
       groups[g].map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
   });
+  if (bizOrder.length) {
+    var mm = ym(new Date());
+    h += '<div class="sec-title" style="margin-top:22px"><span>' + ic('brief', 16) + ' Biznes</span><button class="link" data-a="bizSetup">Sozlash</button></div><div class="muted small" style="margin:-4px 4px 8px">Bu pullar sof boylik va shaxsiy statistikaga kirmaydi.</div>';
+    bizOrder.forEach(function (g) {
+      var tot = 0, inc = 0, exp = 0, ids = {};
+      groups[g].forEach(function (a) { tot += conv(b[a.id] || 0, a.valyuta); ids[a.id] = 1; });
+      txIn(mm).forEach(function (t) { if (!ids[t.hisob] || t.turi === 'otkazma') return; if (t.turi === 'kirim') inc += txVal(t); else exp += txVal(t); });
+      h += '<div class="label-up between"><span>' + esc(g.slice(1)) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div>' +
+        '<div class="muted small" style="margin:-4px 4px 6px">' + MONTHS[new Date().getMonth()] + ': kirim +' + short(inc) + ' · chiqim −' + short(exp) + ' · natija ' + (inc - exp >= 0 ? '+' : '−') + short(Math.abs(inc - exp)) + '</div>' +
+        '<div class="glass list">' + groups[g].map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
+    });
+  }
   if (inactive.length) h += '<div class="label-up">Faol emas</div><div class="glass list dim">' + inactive.map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
   return h + '</div>';
 }
@@ -1024,6 +1086,8 @@ function vSettings() {
     row('', '', 'globe', 'Til', val("O'zbekcha")) + '</div>';
   h += '<div class="label-up">Ma\'lumotlar</div><div class="glass list">' +
     row('openSheet', '', 'sheet', 'Google Sheets jadvali', val('Ulangan')) +
+    row('bizSetup', '', 'brief', 'Biznes hisoblar', val(Object.keys(bizGroups()).filter(function (g) { return bizGroups()[g].biz; }).length || '')) +
+    row('reviewStart', '', 'scale', 'Haftalik ko\'rik', val(lastReview() ? dayLabel(lastReview().sana) : '')) +
     row('backup', '', 'cloud', 'Zaxira nusxa olish', val(zs ? dayLabel(ymd(zs)) + ' ' + pad(zs.getHours()) + ':' + pad(zs.getMinutes()) : '')) +
     row('xlsx', '', 'dl', 'Excel faylga eksport') +
     row('csv', '', 'dl', 'CSV faylga eksport') +
@@ -1243,7 +1307,7 @@ function lastAcc(type) { var id = store('moliya_acc_' + type); var a = activeAcc
 function openAdd(o) {
   o = o || {};
   var t = o.id ? D.transactions.find(function (x) { return x.id === o.id; }) : null;
-  if (t) F = { id: t.id, turi: t.turi, expr: String(+Number(t.summa).toFixed(2)), hisob: t.hisob, hisobga: t.hisobga, kategoriya: t.kategoriya, sana: t.sana, izoh: t.izoh || '', summa2: t.summa2 === '' ? '' : String(t.summa2), s2edited: true };
+  if (t) F = { id: t.id, turi: t.turi, expr: String(+Number(t.summa).toFixed(2)), hisob: t.hisob, hisobga: t.hisobga, kategoriya: t.kategoriya, sana: t.sana, izoh: t.izoh || '', kurs: t.kurs || '', summa2: t.summa2 === '' ? '' : String(t.summa2), s2edited: true };
   else {
     var turi = o.turi || 'chiqim', acc = activeAccs();
     F = { turi: turi, expr: '', hisob: o.hisob || lastAcc(turi), hisobga: '', kategoriya: '', sana: today(), izoh: '', summa2: '', s2edited: false };
@@ -1311,7 +1375,8 @@ function saveTx() {
   if (!F.hisob) return toast('Hisobni tanlang');
   if (F.turi !== 'otkazma' && !F.kategoriya) { toast('Kategoriyani tanlang'); var c = document.querySelector('.cats'); if (c) c.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], 250); return; }
   if (F.turi === 'otkazma' && (!F.hisobga || F.hisobga === F.hisob)) return toast('Ikki xil hisob tanlang');
-  var isNew = !F.id, t = { id: F.id || cid(), turi: F.turi, summa: v, hisob: F.hisob, kategoriya: F.turi === 'otkazma' ? '' : F.kategoriya, hisobga: F.turi === 'otkazma' ? F.hisobga : '', summa2: F.turi === 'otkazma' && F.summa2 ? parseNum(F.summa2) : '', sana: F.sana, izoh: F.izoh };
+  if (F.turi !== 'otkazma' && !String(F.izoh || '').trim() && /boshqa/i.test((D.categories.find(function (c) { return c.id === F.kategoriya; }) || {}).nomi || '')) { toast('"Boshqa" uchun qisqa izoh yozing: nima edi?', 3500); return act.note(); }
+  var isNew = !F.id, t = { id: F.id || cid(), turi: F.turi, summa: v, hisob: F.hisob, kategoriya: F.turi === 'otkazma' ? '' : F.kategoriya, hisobga: F.turi === 'otkazma' ? F.hisobga : '', summa2: F.turi === 'otkazma' && F.summa2 ? parseNum(F.summa2) : '', sana: F.sana, izoh: F.izoh, kurs: F.kurs || '' };
   var btn = $('#okBtn'); btn.disabled = true; btn.innerHTML = '<div class="spin" style="width:24px;height:24px;border-color:rgba(255,255,255,.35);border-top-color:#fff"></div>';
   store('moliya_acc_' + F.turi, F.hisob);
   var after = function () { if (t.turi === 'chiqim') setTimeout(function () { budgetWarn(t); }, 900); };
@@ -1373,7 +1438,7 @@ function analyze() {
   grow.sort(function (a, b) { return (b.pj - b.avg) - (a.pj - a.avg); });
   // Takroriy to'lovga o'xshash amallar (oxirgi 4 oyda kamida 3 oyda, summasi deyarli bir xil)
   var from4 = addMonth(cm, -4), grp = {};
-  D.transactions.forEach(function (t) {
+  D.transactions.map(ptx).filter(function (t) { return t && !t._x && t.kategoriya !== '__fix'; }).forEach(function (t) {
     if (t.turi !== 'chiqim' || t.sana.slice(0, 7) < from4) return;
     var key = t.kategoriya + '|' + String(t.izoh || '').toLowerCase().replace(/[\d.,]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
     (grp[key] = grp[key] || []).push(t);
@@ -1394,7 +1459,7 @@ function analyze() {
   sug = sug.slice(0, 5);
   // Hafta kunlari (oxirgi 90 kun) va mayda xarajatlar (shu oy)
   var since = ymd(new Date(Date.now() - 90 * 864e5)), wd = [0, 0, 0, 0, 0, 0, 0], small = { n: 0, s: 0 }, top = [];
-  D.transactions.forEach(function (t) {
+  D.transactions.map(ptx).filter(function (t) { return t && !t._x && t.kategoriya !== '__fix'; }).forEach(function (t) {
     if (t.turi !== 'chiqim') return;
     var v = txVal(t);
     if (t.sana >= since) wd[new Date(t.sana + 'T12:00').getDay()] += v;
@@ -1404,6 +1469,9 @@ function analyze() {
   return { score: score, parts: parts, projExp: projExp, projInc: projInc, spent: cur.exp, inc: cur.inc, recDue: recDue, recList: recList, daily: daily, left: dim - day, avgExp: avgExp, lim: lim, grow: grow.slice(0, 4), sug: sug, wd: wd, small: small, top: top.slice(0, 3) };
 }
 function vAnalysis() {
+  return '<button class="glass card row" data-a="reviewStart" style="width:100%;text-align:left;margin-top:12px;border:1px solid var(--glass-b)"><span class="orb o40">' + ic('scale', 18) + '</span><span class="mid" style="flex:1"><span class="b">Haftalik ko\'rik</span><div class="muted small">' + (lastReview() ? 'Oxirgisi: ' + dayLabel(lastReview().sana) + (lastReview().qaror ? ' · qaror: ' + esc(String(lastReview().qaror).slice(0, 60)) : '') : 'Hali o\'tkazilmagan') + '</div></span>' + ic('chev', 16) + '</button>' + vAnalysis0();
+}
+function vAnalysis0() {
   var a = analyze(), h = '', sc = a.score;
   var lbl = sc >= 80 ? ['A\'lo', 'inc'] : sc >= 60 ? ['Yaxshi', 'inc'] : sc >= 40 ? ['O\'rtacha', 'warn'] : ['Zaif', 'exp'];
   h += '<div class="glass card row" style="margin-top:12px;gap:18px"><div class="donut" role="img" aria-label="Salomatlik bali ' + sc + '" style="width:120px;height:120px;background:conic-gradient(var(--pri) 0 ' + sc + '%,var(--track) ' + sc + '% 100%)"><div style="width:90px;height:90px"><span class="xb" style="font-size:30px;line-height:1">' + sc + '</span><span class="muted small">/ 100</span></div></div>' +
@@ -1609,7 +1677,7 @@ function accSheet(id) {
     '<div><label class="f" for="aB">Boshlang\'ich qoldiq</label><input class="inp" id="aB" inputmode="decimal" value="' + esc(fmtInput(a.boshlangich || 0)) + '" data-in="fmtnum"></div></div>' +
     '<label class="f">Belgi</label><div class="icons" id="aI">' + ACC_ICONS.map(function (k) { return '<button class="orb o44' + (k === window._accIcon ? ' on' : '') + '" data-a="accIcon" data-v="' + k + '" aria-label="' + k + '">' + ic(k) + '</button>'; }).join('') + '</div>' +
     '<button class="li" data-a="accActive" style="margin-top:10px"><span class="mid"><div class="t">Faol hisob</div><div class="s">O\'chirilsa, ro\'yxat va balansda ko\'rinmaydi</div></span><span class="toggle ' + (isActive(a) ? 'on' : '') + '" id="aF"></span></button>' +
-    '<button class="li" data-a="accTotal"><span class="mid"><div class="t">Umumiy balansga qo\'shilsin</div><div class="s">Biznes yoki boshqa odamning pulini umumiy balansdan ajratish uchun o\'chiring</div></span><span class="toggle ' + (a.jamiga === '' || a.jamiga === undefined || truthy(a.jamiga) ? 'on' : '') + '" id="aJ"></span></button>' +
+    '<button class="li" data-a="accTotal"><span class="mid"><div class="t">Shaxsiy pul</div><div class="s">O\'chirilsa: biznes yoki boshqa odamning puli sifatida alohida turadi, sof boylik va statistikaga kirmaydi</div></span><span class="toggle ' + (a.jamiga === '' || a.jamiga === undefined || truthy(a.jamiga) ? 'on' : '') + '" id="aJ"></span></button>' +
     '<div style="height:14px"></div><button class="btn btn-pri" data-a="saveAcc" data-v="' + (id || '') + '">Saqlash</button>' +
     (id ? '<button class="btn btn-del" data-a="delAcc" data-v="' + id + '">Hisobni o\'chirish</button>' : ''));
 }
@@ -1704,6 +1772,84 @@ function exportCsv() {
 }
 
 /* ================= HODISALAR ================= */
+/* ================= HAFTALIK KO'RIK (5.1) ================= */
+// 4 qadam: 1) naqd pulni sanash, 2) karta va bank qoldig'i, 3) "Boshqa"ni tozalash, 4) bitta qaror.
+// Farq chiqsa, "Tuzatish (solishtirish)" amali yoziladi: ilova va hayot yana bir xil bo'ladi.
+var R = null;
+function lastReview() { var l = (D && D.reviews || []).slice().sort(function (a, b) { return a.sana < b.sana ? 1 : -1; }); return l[0] || null; }
+function reviewDue() {
+  if (!D || D.transactions.length < 5) return false;
+  var l = lastReview(); if (!l) return true;
+  var days = Math.round((new Date(today() + 'T12:00') - new Date(l.sana + 'T12:00')) / 864e5);
+  return days >= 7 || (days >= 5 && new Date().getDay() === 0);
+}
+function revAccs(step) { return D.accounts.filter(function (a) { return isPers(a) && isActive(a) && (step === 1 ? a.turi === 'naqd' : a.turi !== 'naqd'); }).sort(function (a, b) { return (a.tartib || 99) - (b.tartib || 99); }); }
+function revOthers() { return sortTx(D.transactions.filter(function (t) { return t.turi === 'chiqim' && isPers(accById(t.hisob)) && isOther(t) && !R.skip[t.id]; })); }
+function revTopCats() {
+  var f = {}; D.transactions.forEach(function (t) { if (t.turi === 'chiqim' && !isOther(t) && t.kategoriya && !VCAT[t.kategoriya]) f[t.kategoriya] = (f[t.kategoriya] || 0) + 1; });
+  return D.categories.filter(function (c) { return c.turi === 'chiqim' && !/boshqa/i.test(c.nomi); }).sort(function (a, b) { return (f[b.id] || 0) - (f[a.id] || 0); }).slice(0, 10);
+}
+function revSend(t) { var r = R; r.pend = (r.pend || 0) + 1; r.chain = r.chain.then(function () { return api('saveTransaction', t); }).then(function (d) { if (--r.pend === 0) set(d); }, function () { r.pend--; }); return r.chain; }
+function vReview() {
+  if (!R) R = { step: 1, val: {}, naqd: 0, karta: 0, clean: 0, skip: {}, chain: Promise.resolve(), qaror: '' };
+  var st = R.step, names = ['', 'Naqd pulni sanash', 'Karta va bank qoldig\'i', '"Boshqa"ni tozalash', 'Keyingi hafta uchun qaror'];
+  var h = subHdr('Haftalik ko\'rik', '<span class="muted b">' + st + ' / 4</span>') + '<div class="wrap">';
+  h += '<div class="row" style="gap:6px;margin:4px 0 14px">' + [1, 2, 3, 4].map(function (k) { return '<div class="bar" style="flex:1;height:6px"><i style="width:' + (k < st ? 100 : k === st ? 50 : 0) + '%"></i></div>'; }).join('') + '</div>';
+  h += '<h2 style="margin:0 0 4px">' + names[st] + '</h2>';
+  if (st <= 2) {
+    var accs = revAccs(st), b = balances();
+    h += '<div class="muted" style="margin-bottom:12px">' + (st === 1 ? 'Hamyoningiz va uydagi naqd pulni sanang. Ilovadagi raqam bilan farq bo\'lsa, haqiqiy summani yozing.' : 'Bank ilovasidagi qoldiqni yozing. Bir xil bo\'lsa, bo\'sh qoldiring.') + '</div>';
+    if (!accs.length) h += '<div class="glass card muted">Bu turdagi shaxsiy hisob yo\'q.</div>';
+    else h += '<div class="glass list">' + accs.map(function (a) {
+      var v = R.val[a.id], d = v === undefined || v === '' ? 0 : parseNum(v) - (b[a.id] || 0);
+      return '<div class="li" style="flex-wrap:wrap"><span class="orb o40">' + ic(a.belgi || 'wallet', 18) + '</span><span class="mid"><div class="t" style="font-weight:600">' + esc(a.nomi) + '</div><div class="s">Ilovada: ' + fmt(b[a.id] || 0, a.valyuta) + '</div></span>' +
+        '<input class="inp" style="width:140px;margin:0;text-align:right;font-size:16px;letter-spacing:0" inputmode="decimal" data-in="revv" data-v="' + a.id + '" placeholder="Haqiqatda" value="' + esc(v || '') + '">' +
+        '<div class="s" id="rd_' + a.id + '" style="width:100%;text-align:right;' + (d ? 'color:var(--amber,#A15C07)' : '') + '">' + (d ? 'Farq: ' + fmt(d, a.valyuta, { plus: true }) : '') + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="muted small" style="margin:10px 4px">Farq bo\'lsa, "Tuzatish (solishtirish)" amali yoziladi. Katta farq ko\'pincha yozilmay qolgan kirim yoki xarajat belgisi.</div>';
+    h += '<button class="btn btn-pri" data-a="revNext">Keyingisi</button>';
+  } else if (st === 3) {
+    var list = revOthers(), wk = ymd(new Date(Date.now() - 7 * 864e5)), nWeek = list.filter(function (t) { return t.sana >= wk; }).length;
+    h += '<div class="muted" style="margin-bottom:12px">Hali tarqatilmagan: <b>' + list.length + ' ta</b>' + (nWeek ? ' (shu hafta ' + nWeek + ' ta)' : '') + '. Bu haftada ' + R.clean + ' ta tozalandi. Hammasini bir kunda qilish shart emas.</div>';
+    if (!list.length) h += '<div class="glass card" style="text-align:center"><div style="font-size:34px">✓</div><div class="b">"Boshqa" toza!</div></div>';
+    else {
+      var t = list[0], a = accById(t.hisob);
+      h += '<div class="glass card"><div class="xb exp" style="font-size:30px">−' + fmt(t.summa, a.valyuta) + '</div><div class="muted">' + dayLabel(t.sana) + ' · ' + esc(a.nomi) + (t.izoh ? ' · ' + esc(t.izoh) : ' · izohsiz') + '</div>' +
+        '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">' + revTopCats().map(function (c) { return '<button class="chip glass" style="height:38px" data-a="revCat" data-v="' + c.id + '">' + ic(c.belgi || 'box', 15) + ' ' + esc(c.nomi) + '</button>'; }).join('') +
+        '<button class="chip glass" style="height:38px" data-a="revBiz">' + ic('brief', 15) + ' Biznes xarajati</button></div>' +
+        '<div class="row" style="gap:10px;margin-top:14px"><button class="btn" style="flex:1" data-a="revSkip">O\'tkazib yuborish</button></div></div>';
+    }
+    h += '<div style="height:10px"></div><button class="btn btn-pri" data-a="revNext">Keyingi qadam</button>';
+  } else {
+    var since = ymd(new Date(Date.now() - 6 * 864e5)), wkExp = 0, by = {}, prev = 0, p0 = ymd(new Date(Date.now() - 34 * 864e5));
+    D.transactions.forEach(function (t0) { var t = ptx(t0); if (!t || t.turi !== 'chiqim' || t._x || t.kategoriya === '__fix') return; var v = txVal(t); if (t.sana >= since) { wkExp += v; by[t.kategoriya] = (by[t.kategoriya] || 0) + v; } else if (t.sana >= p0) prev += v; });
+    var avg = prev / 4, top = Object.keys(by).sort(function (x, y) { return by[y] - by[x]; }).slice(0, 3), lr = lastReview();
+    h += '<div class="glass card"><div class="muted small">Oxirgi 7 kun xarajati (shaxsiy)</div><div class="xb" style="font-size:26px">' + fmt(wkExp) + '</div><div class="muted small">' + (avg ? 'Oldingi 4 hafta o\'rtachasi: ' + fmt(avg) + ' (' + (wkExp >= avg ? '▲ +' : '▼ ') + Math.round((wkExp / avg - 1) * 100) + '%)' : '') + '</div>' +
+      (top.length ? '<div style="margin-top:10px">' + top.map(function (k) { return '<div class="between small" style="padding:4px 0"><span>' + esc(catById(k).nomi) + '</span><b>' + short(by[k]) + '</b></div>'; }).join('') + '</div>' : '') + '</div>';
+    if (R.naqd || R.karta || R.clean) h += '<div class="muted small" style="margin:8px 4px">Bu ko\'rikda: ' + [R.naqd ? 'naqd farqi ' + fmt(R.naqd, base(), { plus: true }) : '', R.karta ? 'karta farqi ' + fmt(R.karta, base(), { plus: true }) : '', R.clean ? R.clean + ' ta amal tozalandi' : ''].filter(String).join(' · ') + '</div>';
+    if (lr && lr.qaror) h += '<div class="glass card"><div class="muted small">O\'tgan safargi qaroringiz (' + dayLabel(lr.sana) + ')</div><div class="b" style="margin-top:4px">' + esc(lr.qaror) + '</div></div>';
+    h += '<div class="muted" style="margin:10px 2px 8px">Keyingi hafta uchun bitta aniq qaror yozing. Kichik va o\'lchanadigan bo\'lsin.</div>' +
+      '<textarea class="inp" id="revQ" rows="3" maxlength="200" style="text-align:left;font-size:16px;letter-spacing:0;height:auto" placeholder="Masalan: kafega haftasiga 150 ming dan oshirmayman">' + esc(R.qaror) + '</textarea>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px">' + ['Har kuni kechqurun yozib boraman', 'Qarzga shu hafta to\'lov qilaman', top[0] ? esc(catById(top[0]).nomi) + ' xarajatini kamaytiraman' : 'Naqd pulni kartadan yechmayman'].map(function (q) { return '<button class="chip glass" data-a="revQ" data-v="' + esc(q) + '">' + q + '</button>'; }).join('') + '</div>' +
+      '<button class="btn btn-pri" data-a="revDone">Ko\'rikni yakunlash</button>';
+  }
+  return h + '</div>';
+}
+function nwInfo() {
+  var b = balances(), dt = debtTotals(), acc = D.accounts.filter(function (a) { return isPers(a) && (isActive(a) || b[a.id]); });
+  var open = (D.debts || []).filter(debtOpen).sort(function (x, y) { return conv(debtLeft(y), y.valyuta) - conv(debtLeft(x), x.valyuta); });
+  sheet('<h3>Sof boylik qanday hisoblanadi</h3><div class="muted small" style="margin-bottom:10px">Shaxsiy hisoblardagi pul + sizga qaytariladigan qarzlar − siz qaytaradigan qarzlar. Biznes kassalari kirmaydi.</div>' +
+    '<div class="label-up between"><span>Shaxsiy hisoblar</span><span style="text-transform:none;letter-spacing:0">' + fmt(persCash()) + '</span></div><div class="glass list">' + acc.map(function (a) { return '<div class="li"><span class="mid"><div class="t">' + esc(a.nomi) + '</div></span><span class="amt ' + ((b[a.id] || 0) < 0 ? 'exp' : '') + '">' + fmt(b[a.id] || 0, a.valyuta) + '</span></div>'; }).join('') + '</div>' +
+    (open.length ? '<div class="label-up between"><span>Ochiq qarzlar</span><span style="text-transform:none;letter-spacing:0">' + (dt.oldim ? '−' + fmt(dt.oldim) : '') + (dt.berdim ? ' +' + fmt(dt.berdim) : '') + '</span></div><div class="glass list">' + open.map(function (d) { return '<div class="li"><span class="mid"><div class="t">' + esc(d.ism) + '</div><div class="s">' + (d.turi === 'oldim' ? 'Siz qaytarasiz' : 'Sizga qaytaradi') + '</div></span><span class="amt ' + (d.turi === 'oldim' ? 'exp' : 'inc') + '">' + (d.turi === 'oldim' ? '−' : '+') + fmt(Math.max(0, debtLeft(d)), d.valyuta || 'UZS') + '</span></div>'; }).join('') + '</div>' : '') +
+    '<div class="hero" style="margin-top:14px;padding:16px 20px"><div class="lbl">Sof boylik</div><div class="big" style="font-size:28px">' + fmt(netWorth()) + '</div></div>');
+}
+function bizSheet() {
+  var g = bizGroups(), first = !truthy(setv('biznes_sozlandi'));
+  window._biz = {}; Object.keys(g).forEach(function (k) { window._biz[k] = first ? (k !== 'Shaxsiy' && !g[k].biz ? true : !!g[k].biz && !g[k].pers) : !!g[k].biz && !g[k].pers; });
+  sheet('<h3>Biznes hisoblar</h3><div class="muted small" style="margin-bottom:10px">Belgilangan guruhlar biznes puli hisoblanadi: alohida ko\'rsatiladi, sof boylik va shaxsiy statistikaga kirmaydi. Biznesdan o\'zingizga o\'tkazgan pul shaxsiy "kirim", biznesga bergan pulingiz "chiqim" bo\'ladi.</div><div class="glass list">' +
+    Object.keys(g).map(function (k) { return '<button class="li" data-a="bizTog" data-v="' + esc(k) + '"><span class="orb o40">' + ic(k === 'Shaxsiy' ? 'wallet' : 'brief', 18) + '</span><span class="mid"><div class="t">' + esc(k) + '</div><div class="s">' + (g[k].pers + g[k].biz) + ' ta hisob</div></span><span class="toggle ' + (window._biz[k] ? 'on' : '') + '" data-g="' + esc(k) + '"></span></button>'; }).join('') +
+    '</div><div style="height:14px"></div><button class="btn btn-pri" data-a="bizSave">Saqlash</button>');
+}
 var act = {
   tab: function (v) { haptic(); go(v); },
   sub: function (v) { if (v === 'history') { S.hcat = ''; S.hacc = ''; S.ht = 'all'; S.hq = ''; S.accBack = false; } openSub(v); },
@@ -1862,6 +2008,36 @@ var act = {
     });
   },
   queueSheet: function () { queueSheet(); },
+  nwInfo: function () { nwInfo(); },
+  bizSetup: function () { bizSheet(); },
+  bizTog: function (g) { window._biz[g] = !window._biz[g]; var t = document.querySelector('.toggle[data-g="' + CSS.escape(g) + '"]'); if (t) t.classList.toggle('on', window._biz[g]); },
+  bizSave: function (v, el) { el.disabled = true; var l = Object.keys(window._biz).filter(function (k) { return window._biz[k]; }); api('setBusinessGroups', l).then(function (d) { closeSheet(); set(d); toast(l.length ? 'Biznes alohida: ' + l.join(', ') : 'Hamma hisoblar shaxsiy'); }).catch(function () { el.disabled = false; }); },
+  reviewStart: function () { R = null; closeSheet(); openSub('review'); },
+  revNext: function () {
+    if (R.step <= 2) {
+      var b = balances(), fx = [];
+      revAccs(R.step).forEach(function (a) { var v = R.val[a.id]; if (v === undefined || v === '') return; var d = Math.round((parseNum(v) - (b[a.id] || 0)) * 100) / 100; if (!d) return; fx.push({ a: a, d: d }); });
+      var go = function () {
+        fx.forEach(function (x) {
+          var t = { id: cid(), turi: x.d > 0 ? 'kirim' : 'chiqim', summa: Math.abs(x.d), hisob: x.a.id, kategoriya: '__fix', hisobga: '', summa2: '', sana: today(), izoh: 'Haftalik ko\'rik: solishtirish' };
+          D.transactions.push(t); _bal = null; R[R.step === 1 ? 'naqd' : 'karta'] += conv(x.d, x.a.valyuta); revSend(t);
+        });
+        R.step++; window.scrollTo(0, 0); render();
+      };
+      if (fx.some(function (x) { return Math.abs(conv(x.d, x.a.valyuta)) >= 1000000; })) return ask('Farq katta: ' + fx.map(function (x) { return x.a.nomi + ' ' + fmt(x.d, x.a.valyuta, { plus: true }); }).join(', ') + '. Tuzatish amali yozilsinmi? (Yozilmagan amallarni eslasangiz, avval ularni qo\'shgan ma\'qul.)').then(go);
+      return go();
+    }
+    R.step++; window.scrollTo(0, 0); render();
+  },
+  revCat: function (cat) { var t = revOthers()[0]; if (!t) return; var n = Object.assign({}, t, { kategoriya: cat }); delete n._q; t.kategoriya = cat; R.clean++; haptic(); render(); revSend(n); },
+  revBiz: function () { toast('Biznes xarajatini biznes kassasidan yozing yoki "Biznesga berildi" deb o\'tkazma qiling. Hozircha o\'tkazib yuboramiz.', 4500); var t = revOthers()[0]; if (t) R.skip[t.id] = 1; render(); },
+  revSkip: function () { var t = revOthers()[0]; if (t) R.skip[t.id] = 1; render(); },
+  revQ: function (v) { var q = $('#revQ'); if (q) { q.value = v; R.qaror = v; } },
+  revDone: function (v, el) {
+    var q = ($('#revQ') || {}).value || ''; R.qaror = q.trim(); el.disabled = true;
+    var r = { sana: today(), naqd_farq: Math.round(R.naqd), karta_farq: Math.round(R.karta), tozalandi: R.clean, qaror: R.qaror };
+    R.chain.then(function () { return api('saveReview', r); }).then(function (d) { set(d); R = null; S.sub = null; render(); haptic('medium'); toast('Ko\'rik yakunlandi ✓ Keyingisi bir haftadan keyin', 3500); }).catch(function () { el.disabled = false; });
+  },
   qRetry: function (id) { queue(queue().map(function (x) { if (x.id === id) { x = Object.assign({}, x); delete x._err; } return x; })); closeSheet(); flushQueue(); },
   qDel: function (id) { ask('Bu amal butunlay o\'chiriladi. Ishonchingiz komilmi?').then(function () { queue(queue().filter(function (x) { return x.id !== id; })); if (D) { D.transactions = D.transactions.filter(function (x) { return !(x._q && x.id === id); }); _bal = null; render(); api_('getData', [], true).then(set, function () {}); } queueSheet(); }); },
   bioTog: function () {
@@ -1901,6 +2077,7 @@ document.addEventListener('input', function (e) {
   if (k === 'hq') { S.hq = e.target.value; clearTimeout(window._hqT); window._hqT = setTimeout(function () { render(); var i = $('#hq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); }
   if (k === 's2') { F.summa2 = e.target.value.replace(',', '.'); F.s2edited = true; }
   if (k === 'fmtnum') { e.target.value = fmtInput(e.target.value); }
+  if (k === 'revv' && R) { var id = e.target.dataset.v; e.target.value = fmtInput(e.target.value); R.val[id] = e.target.value; var a = accById(id), d = e.target.value === '' ? 0 : parseNum(e.target.value) - (balances()[id] || 0), el = $('#rd_' + id); if (el) { el.textContent = d ? 'Farq: ' + fmt(d, a.valyuta, { plus: true }) : ''; el.style.color = d ? 'var(--amber,#A15C07)' : ''; } }
   if (k === 'emoji') { var v = e.target.value.trim(); if (v) { window._catIcon = v; $('#cPrev').innerHTML = ic(v, 24); document.querySelectorAll('#cE .emojis button').forEach(function (b) { b.classList.remove('on'); }); } }
 });
 
