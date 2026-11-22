@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '5.2';
+var VERSION = '5.3';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -759,7 +759,7 @@ try { if (GH) google.script.history.setChangeHandler(hbPop); else window.addEven
 function render() {
   CTX = null;
   if (!D) return;
-  var v = S.sub ? ({ history: vHistory, settings: vSettings, cats: vCats, debts: vDebts, acc: vAcc, review: vReview })[S.sub]() : ({ home: vHome, accounts: vAccounts, stats: vStats, budget: vBudget })[S.tab]();
+  var v = S.sub ? ({ history: vHistory, settings: vSettings, cats: vCats, debts: vDebts, acc: vAcc, review: vReview, reja: vReja })[S.sub]() : ({ home: vHome, accounts: vAccounts, stats: vStats, budget: vBudget })[S.tab]();
   $('#app').innerHTML = curWrap(v);
   renderTabs(); syncBack(); afterRender();
 }
@@ -829,6 +829,7 @@ function vHome() {
   h += '<div class="quick">' + [['chiqim', 'down', 'Xarajat'], ['kirim', 'up', 'Daromad'], ['otkazma', 'swap', "O'tkazma"], ['hist', 'list', 'Tarix']].map(function (q) {
     return '<button data-a="quick" data-v="' + q[0] + '"><span class="orb">' + ic(q[1], 22, 2.2) + '</span>' + q[2] + '</button>';
   }).join('') + '</div>';
+  h += dailyCard();
   // Qarzlar: alohida karta (5.1.1). Sof boylik shu yerda ko'rinadi
   if (dt.n) {
     CTX = 'debt';
@@ -839,6 +840,7 @@ function vHome() {
       '<div class="between"><span class="row" style="gap:10px"><span class="orb o40" style="background:rgba(196,43,60,.1);color:var(--red)">' + ic('hand', 18) + '</span><span style="padding-right:44px"><span class="b">Qarzlar</span><div class="muted small">' + dt.n + ' ta ochiq' + (big ? ' · eng kattasi ' + esc(big.n) + ' ' + short(big.l) : '') + '</div></span></span>' + ic('chev', 16) + '</div>' +
       '<div class="between" style="margin-top:12px;align-items:flex-end"><div class="xb exp" style="font-size:26px">' + (dt.oldim ? '−' + fmt(dt.oldim, b) : fmt(0, b)) + '</div>' + (dt.berdim ? '<div class="small inc b">Sizga qarz +' + short(dt.berdim) + '</div>' : '') + '</div>' +
       (all ? '<div class="bar" style="margin:10px 0 6px;height:8px"><i style="width:' + Math.min(100, pp * 100) + '%"></i></div><div class="muted small">' + Math.round(pp * 100) + '% to\'langan · ' + short(paid) + ' / ' + short(all) + '</div>' : '') + '</button>' +
+      (dt.oldim ? (function () { var pl = planOn() ? payoffPlan(planDebt()) : null; return '<button data-a="reja" class="between" style="width:100%;margin-top:12px;padding:12px 0 0;border:0;border-top:1px solid var(--line,rgba(11,21,48,.08));background:none;color:inherit;text-align:left"><span class="row" style="gap:8px">' + ic('flag', 16) + '<span class="b">' + (pl && pl.end ? 'Qarzsiz kun: ' + monLabel(pl.end) : 'Qarzdan chiqish rejasini tuzing') + '</span></span>' + ic('chev', 16) + '</button>'; })() : '') +
       '<button data-a="nwInfo" class="between" style="width:100%;margin-top:12px;padding:12px 0 0;border:0;border-top:1px solid var(--line,rgba(11,21,48,.08));background:none;color:inherit;text-align:left"><span class="muted">Sof boylik (pul − qarzlar)</span><span class="b ' + (tot < 0 ? 'exp' : 'inc') + '">' + fmt(tot, b) + '</span></button></div>';
     CTX = null;
   }
@@ -1100,12 +1102,13 @@ function vSettings() {
   h += '<button class="glass card row" data-a="editName" style="width:100%;text-align:left;border:1px solid var(--glass-b)"><span class="orb o54 pri xb" style="font-size:20px">' + esc((userName() || 'M').charAt(0).toUpperCase()) + '</span><span class="mid"><div class="b" style="font-size:16px">' + esc(userName() || 'Ismingizni kiriting') + '</div><div class="muted small">Profil</div></span>' + ic('chev', 16) + '</button>';
   h += '<div class="label-up">Moliya</div><div class="glass list">' +
     row('planGo', 'debt', 'hand', 'Qarzlar', val(debtTotals().n ? debtTotals().n + ' ta ochiq' : '')) +
+    row('reja', '', 'flag', 'Qarzdan chiqish rejasi', val(planOn() ? (function () { var p = payoffPlan(planDebt()); return p.end ? monLabel(p.end) : '✓'; })() : 'tuzilmagan')) +
     row('cats', 'chiqim', 'cart', 'Xarajat kategoriyalari') + row('cats', 'kirim', 'wallet', 'Daromad kategoriyalari') +
     row('rates', '', 'dollar', 'Valyuta kurslari', val(setv('kurs_sana') ? 'CBU · ' + esc(setv('kurs_sana')) : '')) + '</div>';
   var botOn = D.bot && D.bot.ulangan;
   h += '<div class="label-up">Telegram bot</div><div class="glass list">' +
     row('botInfo', '', 'send', 'Telegram bot', val(botOn ? 'Ulangan ✓' : 'Ulanmagan')) +
-    (botOn ? row('togBot', 'bot_hisobot', 'moon', 'Kechki hisobot (21:00)', togB('bot_hisobot')) + row('togBot', 'bot_eslatma', 'repeat', 'To\'lov eslatmalari (09:00)', togB('bot_eslatma')) : '') + '</div>';
+    (botOn ? row('togBot', 'bot_hisobot', 'moon', 'Kechki hisobot (21:00)', togB('bot_hisobot')) + row('togBot', 'bot_eslatma', 'repeat', 'To\'lov eslatmalari (09:00)', togB('bot_eslatma')) + (planOn() ? row('togBot', 'bot_ertalab', 'flag', 'Ertalabki limit (08:00)', togB('bot_ertalab')) : '') : '') + '</div>';
   h += '<div class="label-up">Ko\'rinish</div><div class="glass list">' +
     row('baseCur', '', 'globe', 'Asosiy valyuta', val(base())) +
     row('togSet', 'belgi_chapda', 'side', 'Valyuta belgisi chapda', tog('belgi_chapda')) +
@@ -1171,6 +1174,7 @@ function vDebts(embedded) {
     if (i === 0) h += '<div class="hero" style="margin-top:14px;padding:16px 20px"><div class="between"><span class="lbl">' + (S.debtArch ? 'Yopilgan qarzlar' : S.debtTab === 'oldim' ? 'Qaytarishim kerak' : 'Menga qaytarishlari kerak') + '</span><span class="lbl" style="background:rgba(255,255,255,.16);padding:3px 10px;border-radius:10px">' + p + '% to\'langan</span></div><div class="big" style="font-size:30px">' + fmt(S.debtArch ? x.s : x.l, c) + '</div><div class="lbl">' + (S.debtArch ? all.length + ' ta qarz' : 'Jami: ' + fmt(x.s, c)) + '</div><div class="bar" style="margin-top:10px;background:rgba(255,255,255,.22)"><i style="width:' + p + '%;background:#fff"></i></div></div>';
     else h += '<div class="glass card between" style="margin-top:10px;padding:12px 16px"><span class="b">' + c + '</span><span class="muted small">Jami: <b style="color:var(--ink)">' + fmt(x.s, c) + '</b></span><span class="muted small">Qolgan: <b style="color:var(--ink)">' + fmt(x.l, c) + '</b></span><span class="chip" style="height:26px;padding:0 10px;background:var(--tab-on);color:var(--pri-ink)">' + p + '%</span></div>';
   });
+  if (S.debtTab === 'oldim' && !S.debtArch && all.length) { var pl0 = planOn() ? payoffPlan(planDebt()) : null; h += '<button class="glass card between" data-a="reja" style="width:100%;margin-top:10px;border:1px solid var(--glass-b);text-align:left"><span class="row" style="gap:10px"><span class="orb o40 pri">' + ic('flag', 18) + '</span><span><span class="b">' + (pl0 && pl0.end ? 'Qarzsiz kun: ' + monLabel(pl0.end) : 'Qarzdan chiqish rejasi') + '</span><div class="muted small">' + (pl0 ? 'Oyiga ' + short(planDebt()) + ' · navbat va tartib' : 'Qachon qarzsiz bo\'lishingizni hisoblaymiz') + '</div></span></span>' + ic('chev') + '</button>'; }
   h += '<div class="chips" style="align-items:center"><span class="muted small b" style="flex:0 0 auto">Tartiblash:</span>' + [['miqdor', 'Miqdor'], ['muddat', 'Muddati'], ['nomi', 'Nomi']].map(function (x) { return '<button data-a="debtSort" data-v="' + x[0] + '" class="' + (S.debtSort === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
   if (!all.length) return h + '<div class="glass card empty" style="margin-top:10px">' + (S.debtArch ? 'Yopilgan qarz yo\'q' : 'Ochiq qarz yo\'q.<br>Yangi qarz qo\'shish uchun <b>+</b> ni bosing.') + '</div>' + (!S.debtArch && arch ? '<button class="btn btn-sec" style="margin-top:8px" data-a="debtArch">' + ic('archive', 18) + 'Yopilganlar (' + arch + ')</button>' : '') + '</div>';
   var td = today();
@@ -1185,6 +1189,126 @@ function vDebts(embedded) {
   }).join('');
   if (!S.debtArch && arch) h += '<button class="btn btn-sec" style="margin-top:12px" data-a="debtArch">' + ic('archive', 18) + 'Yopilganlar (' + arch + ')</button>';
   return h + '</div>';
+}
+
+/* ================= 3-BOSQICH: O'ZGARISH (5.3) ================= */
+// Qarz olingan pul daromad emas, qarzga to'langan pul yashash xarajati emas
+function isDebtCat(id) { var c = D.categories.find(function (x) { return x.id === id; }); return !!c && /qarz/i.test(c.nomi); }
+function debtById(id) { return (D.debts || []).find(function (d) { return d.id === id; }); }
+function monLabel(m) { var p = String(m).split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
+// Oxirgi 3 to'liq oydagi o'rtacha shaxsiy daromad (100 mingga yaxlitlangan)
+function avgIncome() {
+  var m = ym(new Date()), s = 0, n = 0;
+  for (var k = 1; k <= 3; k++) { var v = 0; pIn(addMonth(m, -k)).forEach(function (t) { if (t.turi === 'kirim' && !isDebtCat(t.kategoriya)) v += txVal(t); }); if (v > 0) { s += v; n++; } }
+  return n ? Math.round(s / n / 100000) * 100000 : 0;
+}
+function planOn() { return Number(setv('reja_qarz')) > 0; }
+function planIncome() { return Number(setv('reja_daromad')) || avgIncome(); }
+function planDebt() { return Number(setv('reja_qarz')) || 0; }
+function planSuggest() { return Math.max(500000, Math.round(planIncome() * 0.12 / 500000) * 500000); }
+function debtPaidMonth(m) { var r = 0; (D.payments || []).forEach(function (p) { var d = debtById(p.qarz); if (d && d.turi === 'oldim' && String(p.sana).slice(0, 7) === m) r += conv(Number(p.summa) || 0, d.valyuta || 'UZS'); }); return r; }
+// Shu oy: yashash uchun pul va bugungi limit. Kunlik limit kun boshida qotadi: bugungi xarajat uni o'zgartirmaydi
+function monthPlan(inc, dp) {
+  var m = ym(new Date()), td = today();
+  inc = inc == null ? planIncome() : inc; dp = dp == null ? planDebt() : dp;
+  var live = Math.max(0, inc - dp), spent = 0, spentToday = 0;
+  pIn(m).forEach(function (t) { if (t.turi !== 'chiqim' || isDebtCat(t.kategoriya)) return; var v = txVal(t); spent += v; if (t.sana === td) spentToday += v; });
+  var dim = daysIn(m), daysLeft = dim - new Date().getDate() + 1, perDay = Math.max(0, (live - (spent - spentToday)) / daysLeft);
+  return { inc: inc, dp: dp, live: live, spent: spent, left: live - spent, today: spentToday, perDay: perDay, todayLeft: perDay - spentToday, daysLeft: daysLeft, paidDebt: debtPaidMonth(m) };
+}
+// Qarzdan chiqish: oyiga "monthly" so'm, tartib bo'yicha bittadan yopiladi
+function payoffPlan(monthly, order) {
+  var m = ym(new Date());
+  order = order || setv('reja_tartib') || 'kichik';
+  var list = (D.debts || []).filter(function (d) { return debtOpen(d) && d.turi === 'oldim' && debtLeft(d) > 0; })
+    .map(function (d) { var l = conv(debtLeft(d), d.valyuta || 'UZS'); return { d: d, left: l, rem: l, end: null }; });
+  list.sort(function (a, b) {
+    if (order === 'muddat') { var x = String(a.d.muddat || '9999'), y = String(b.d.muddat || '9999'); if (x !== y) return x < y ? -1 : 1; }
+    return a.left - b.left;
+  });
+  var r = { list: list, total: list.reduce(function (a, x) { return a + x.left; }, 0), end: null, months: 0 };
+  if (!(monthly > 0) || !list.length) return r;
+  var k = 0, first = Math.max(0, monthly - debtPaidMonth(m));
+  while (k < 600) {
+    var b = k === 0 ? first : monthly;
+    for (var i = 0; i < list.length && b > 0; i++) { var x = list[i]; if (x.rem <= 0) continue; var p = Math.min(b, x.rem); x.rem -= p; b -= p; if (x.rem <= 0.5) { x.rem = 0; x.end = addMonth(m, k); } }
+    if (list.every(function (x) { return x.rem <= 0; })) break;
+    k++;
+  }
+  r.end = addMonth(m, k); r.months = k;
+  return r;
+}
+function planStart() { try { return JSON.parse(setv('reja_boshi') || 'null'); } catch (e) { return null; } }
+function monthsWord(k) { return k <= 0 ? 'shu oy' : k + ' oy qoldi'; }
+
+function vReja() {
+  var h = subHdr('Qarzdan chiqish rejasi', planOn() ? '<button class="orb o44" data-a="planForm" aria-label="Rejani o\'zgartirish">' + ic('note', 19) + '</button>' : '') + '<div class="wrap">';
+  var dt = debtTotals();
+  if (!planOn()) {
+    var sug = planSuggest(), pv = payoffPlan(sug);
+    h += '<div class="hero" style="padding:20px"><div class="lbl">Qarzsiz kun</div><div class="big" style="font-size:30px">' + (pv.end ? monLabel(pv.end) : '—') + '</div><div class="lbl">Oyiga ' + fmt(sug) + ' to\'lasangiz · ' + (dt.oldim ? 'qolgan qarz ' + fmt(dt.oldim) : 'ochiq qarz yo\'q') + '</div></div>';
+    h += '<div class="glass card"><div class="b" style="font-size:16px">Qanday ishlaydi</div><div class="muted" style="margin-top:6px;line-height:1.5">1. Oylik daromadingiz va qarzga ajratadigan summani yozasiz.<br>2. Qolgan pul oyning qolgan kunlariga bo\'linadi: har kuni "bugun ishlatsa bo\'ladi" summasini ko\'rasiz.<br>3. Qarzlar navbat bilan yopiladi va aniq "qarzsiz kun" sanasi chiqadi.<br>4. Har ertalab bot bugungi limitni yozadi.</div></div>';
+    return h + '<button class="btn btn-pri" data-a="planForm">' + ic('flag', 18) + 'Rejani tuzish</button></div>';
+  }
+  var mp = monthPlan(), pl = payoffPlan(mp.dp), st = planStart();
+  CTX = 'reja';
+  h += '<div class="hero" style="padding:20px"><div class="between"><span class="lbl row" style="gap:8px">Qarzsiz kun ' + eyeBtn('reja', true) + '</span>' + (pl.end ? '<span class="tag">' + ic('flag', 13, 2.4) + ' ' + monthsWord(pl.months) + '</span>' : '') + '</div>' +
+    '<div class="big" style="font-size:34px">' + (pl.end ? monLabel(pl.end) : 'Qarz yo\'q 🎉') + '</div>' +
+    '<div class="lbl">Qolgan qarz ' + fmt(pl.total) + ' · oyiga ' + fmt(mp.dp) + '</div>';
+  if (st && st.q > 0) { var done = Math.max(0, Math.min(1, 1 - pl.total / st.q)); h += '<div class="bar" style="margin-top:12px;height:8px;background:rgba(255,255,255,.22)"><i style="width:' + done * 100 + '%;background:#fff"></i></div><div class="lbl small" style="margin-top:6px">Reja boshidan (' + fmtDate(st.s) + ') ' + Math.round(done * 100) + '% yopildi</div>'; }
+  h += '</div>';
+  // Shu oy
+  var pd = Math.min(1, mp.dp ? mp.paidDebt / mp.dp : 0);
+  h += '<div class="glass card" style="margin-top:12px"><div class="between"><span class="b">' + MONTHS[new Date().getMonth()] + ': qarzga to\'lov</span><span class="muted"><b style="color:var(--ink)">' + short(mp.paidDebt) + '</b> / ' + short(mp.dp) + '</span></div><div class="bar" style="margin:10px 0 6px"><i style="width:' + pd * 100 + '%"></i></div><div class="muted small">' + (mp.paidDebt >= mp.dp ? 'Bu oylik reja bajarildi ✓' : 'Yana ' + fmt(mp.dp - mp.paidDebt) + ' to\'lash kerak' + (pl.list[0] ? ' · navbatda: ' + esc(pl.list.filter(function (x) { return x.left > 0; })[0].d.ism) : '')) + '</div></div>';
+  if (st) {
+    var dq = (st.q || 0) - pl.total, dn = netWorth() - (st.nw || 0);
+    h += '<div class="grid2" style="margin-top:12px"><div class="glass card" style="margin:0"><div class="muted small">Qarz kamaydi</div><div class="xb ' + (dq > 0 ? 'inc' : dq < 0 ? 'exp' : '') + '" style="font-size:18px">' + (Math.round(dq / 1000) ? (dq > 0 ? '−' : '+') + short(Math.abs(dq)) : 'hali yo\'q') + '</div></div><div class="glass card" style="margin:0"><div class="muted small">Sof boylik o\'zgardi</div><div class="xb ' + (dn > 0 ? 'inc' : dn < 0 ? 'exp' : '') + '" style="font-size:18px">' + (Math.round(dn / 1000) ? (dn > 0 ? '+' : '−') + short(Math.abs(dn)) : '0') + '</div></div></div><div class="muted small" style="margin:6px 4px 0">' + fmtDate(st.s) + ' dan beri</div>';
+  }
+  // Agar ko'proq to'lasam?
+  var more = [1000000, 2000000].map(function (x) { var q = payoffPlan(mp.dp + x); return { x: x, q: q, gain: pl.months - q.months }; }).filter(function (o) { return o.gain > 0; });
+  if (more.length) h += '<div class="label-up">Agar ko\'proq to\'lasangiz</div><div class="glass list">' + more.map(function (o) { return '<div class="li"><span class="orb o40">' + ic('spark', 17) + '</span><span class="mid"><div class="t">Oyiga +' + short(o.x) + '</div><div class="s">Qarzsiz kun: ' + monLabel(o.q.end) + '</div></span><span class="amt inc">' + o.gain + ' oy tezroq</span></div>'; }).join('') + '</div>';
+  // Tartib va navbat
+  var ord = setv('reja_tartib') || 'kichik';
+  h += '<div class="label-up">Qaysi qarz birinchi</div><div class="seg glass">' + [['kichik', 'Avval kichigi'], ['muddat', 'Avval muddati']].map(function (x) { return '<button data-a="planOrder" data-v="' + x[0] + '" class="' + (ord === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  h += '<div class="muted small" style="margin:8px 4px 0">' + (ord === 'kichik' ? 'Kichik qarzlar tez yopiladi: har yopilgan qarz motivatsiya beradi, keyingisiga ko\'proq pul qoladi.' : 'Muddati oldin tugaydigan (yoki o\'tib ketgan) qarzlar birinchi: va\'dalar va munosabatlar uchun.') + '</div>';
+  h += '<div class="glass list" style="margin-top:12px">' + pl.list.map(function (x, i) {
+    return '<button class="li" data-a="debtOpen" data-v="' + x.d.id + '"><span class="orb o40' + (i === 0 ? ' pri' : '') + ' xb" style="font-size:14px">' + (i + 1) + '</span><span class="mid"><div class="t">' + esc(x.d.ism) + '</div><div class="s">' + (x.end ? 'Yopiladi: ' + monLabel(x.end) : '—') + (i === 0 ? ' · hozir shu' : '') + '</div></span><span class="amt">' + fmt(x.left) + '</span></button>';
+  }).join('') + '</div>';
+  h += '<div class="muted small" style="margin:12px 4px 0;line-height:1.5">To\'lovni yozish: qarzni bosing → "Qaytarilgan summani yozish". Shu oyda yozilgan to\'lovlar rejaga o\'zi qo\'shiladi.</div>';
+  CTX = null;
+  return h + '</div>';
+}
+function planForm() {
+  var inc = planIncome(), dp = planDebt() || planSuggest(), avg = avgIncome();
+  sheet('<h3>Oylik reja</h3><div class="muted small" style="margin-bottom:12px">Biznes puli kirmaydi. Keyin istalgan payt o\'zgartirasiz.</div>' +
+    '<label class="f" for="rjI">Oylik daromad (taxminan)</label><input class="inp" id="rjI" inputmode="decimal" data-in="rjIn" value="' + esc(fmtInput(inc)) + '" placeholder="0">' +
+    '<div class="muted small" style="margin:6px 4px 0">' + (avg ? 'Oxirgi 3 oy o\'rtachasi: ' + fmt(avg) + '. Daromad o\'zgarib tursa, kamroq yozing: rejaga ishonch kuchliroq bo\'ladi.' : 'Shaxsiy daromadingizni yozing.') + '</div>' +
+    '<label class="f" for="rjQ" style="margin-top:14px">Har oy qarzga</label><input class="inp" id="rjQ" inputmode="decimal" data-in="rjIn" value="' + esc(fmtInput(dp)) + '" placeholder="0">' +
+    '<div class="chips" style="margin-top:8px">' + [1000000, 2000000, 3000000, 5000000].map(function (x) { return '<button data-a="rjPick" data-v="' + x + '">' + short(x) + '</button>'; }).join('') + '</div>' +
+    '<div class="glass card" id="rjPv" style="margin-top:14px"></div>' +
+    '<button class="btn btn-pri" data-a="planSave">' + ic('check', 18, 2.6) + 'Saqlash</button>');
+  rjPreview();
+}
+function rjPreview() {
+  var el = $('#rjPv'); if (!el) return;
+  var inc = parseNum($('#rjI').value), dp = parseNum($('#rjQ').value), mp = monthPlan(inc, dp), pl = payoffPlan(dp);
+  el.innerHTML = '<div class="between"><span class="muted">Yashash uchun oyiga</span><b>' + fmt(Math.max(0, inc - dp)) + '</b></div>' +
+    '<div class="between" style="margin-top:6px"><span class="muted">Kuniga (taxminan)</span><b>' + fmt(Math.max(0, inc - dp) / 30) + '</b></div>' +
+    '<div class="between" style="margin-top:6px"><span class="muted">Qarzsiz kun</span><b class="inc">' + (dp > 0 && pl.end ? monLabel(pl.end) : '—') + '</b></div>' +
+    (dp > inc && inc > 0 ? '<div class="small exp" style="margin-top:8px">Qarzga daromaddan ko\'p ajratib bo\'lmaydi</div>' : mp.left < 0 ? '<div class="small" style="margin-top:8px;color:var(--amber)">Bu oy allaqachon ' + fmt(-mp.left) + ' ko\'p sarflangan: oy oxirigacha limit 0 bo\'ladi.</div>' : '');
+}
+// Bosh ekran kartasi: bugungi limit
+function dailyCard() {
+  if (!planOn()) return '';
+  var mp = monthPlan(), over = mp.todayLeft < 0, pr = mp.live ? Math.min(1, mp.spent / mp.live) : 1;
+  CTX = 'daily';
+  var h = '<div style="position:relative;margin-top:14px">' + eyeBtn('daily', false, 'position:absolute;top:16px;right:16px;z-index:2') + '<button class="glass card" data-a="reja" style="display:block;width:100%;text-align:left;border:1px solid var(--glass-b);margin:0">' +
+    '<div class="row" style="gap:10px;padding-right:40px"><span class="orb o40 pri">' + ic('flag', 18) + '</span><span><span class="b">Bugun ishlatsa bo\'ladi</span><div class="muted small">' + (mp.left < 0 ? 'Bu oylik yashash puli tugadi' : 'Oy oxirigacha ' + mp.daysLeft + ' kun · qoldi ' + short(Math.max(0, mp.left))) + '</div></span></div>' +
+    '<div class="xb ' + (over ? 'exp' : '') + '" style="font-size:28px;margin-top:12px">' + (over ? '−' + fmt(-mp.todayLeft) : fmt(mp.todayLeft)) + '</div>' +
+    '<div class="muted small">' + (over ? 'Bugungi limitdan oshdi. Ertangi limit shunga kamayadi.' : mp.today ? 'Bugun sarflandi: ' + fmt(mp.today) + ' / ' + fmt(mp.perDay) : 'Bugun hali xarajat yo\'q') + '</div>' +
+    '<div class="bar" style="margin:10px 0 0"><i style="width:' + pr * 100 + '%;' + (barColor(pr) ? 'background:' + barColor(pr) : '') + '"></i></div></button></div>';
+  CTX = null;
+  return h;
 }
 function accOptions(cur, label) {
   return '<option value="">' + label + '</option>' + activeAccs().filter(function (a) { return a.valyuta === cur; }).map(function (a) { return '<option value="' + a.id + '">' + esc(a.nomi) + '</option>'; }).join('');
@@ -2101,6 +2225,20 @@ var act = {
     if (bioOn()) { store('moliya_bio', null); toast('Barmoq izi/yuz o\'chirildi'); return render(); }
     bioRegister().then(function () { toast('Barmoq izi/yuz yoqildi'); render(); }).catch(function (e) { toast('Yoqilmadi: telefonda ekran qulfi (barmoq izi yoki yuz) sozlanganini tekshiring', 4500); });
   },
+  reja: function () { closeSheet(); openSub('reja'); },
+  planForm: function () { planForm(); },
+  rjPick: function (v) { var i = $('#rjQ'); if (i) { i.value = fmtInput(v); rjPreview(); } haptic(); },
+  planSave: function () {
+    var inc = parseNum($('#rjI').value), dp = parseNum($('#rjQ').value);
+    if (!(dp > 0)) return toast('Qarzga oylik summani yozing');
+    if (inc > 0 && dp > inc) return toast('Qarzga daromaddan ko\'p ajratib bo\'lmaydi');
+    var o = { reja_daromad: inc, reja_qarz: dp };
+    if (!planStart()) o.reja_boshi = JSON.stringify({ s: today(), q: Math.round(debtTotals().oldim || 0), nw: Math.round(netWorth()) });
+    Object.assign(D.settings, o); closeSheet(); haptic('medium'); if (S.sub !== 'reja') openSub('reja'); else render();
+    toast('Reja saqlandi ✓');
+    api_('saveSettings', [o], true).catch(function () { toast('Reja serverga yetmadi, keyinroq qayta saqlang', 4000); });
+  },
+  planOrder: function (v) { D.settings.reja_tartib = v; haptic(); render(); api_('saveSettings', [{ reja_tartib: v }], true).catch(function () {}); },
   hideCard: function (k) { if (S.hide) { S.hide = false; try { localStorage.setItem('moliya_hide', '0'); } catch (e) {} } if (HC[k]) delete HC[k]; else HC[k] = 1; try { localStorage.setItem('moliya_hidec', JSON.stringify(HC)); } catch (e) {} haptic(); render(); },
   hideAmt: function () { S.hide = !S.hide; try { localStorage.setItem('moliya_hide', S.hide ? '1' : '0'); } catch (e) {} haptic(); render(); toast(S.hide ? 'Summalar yashirildi' : 'Summalar ko\'rsatildi', 1400); },
   flipTheme: function () { var order = ['tizim', 'yorug', 'tungi'], n = order[(order.indexOf(setv('mavzu') || 'tizim') + 1) % 3]; act.setTheme(n); toast('Mavzu: ' + THEMES[n][1], 1500); },
@@ -2135,6 +2273,7 @@ document.addEventListener('input', function (e) {
   if (k === 'hq') { S.hq = e.target.value; clearTimeout(window._hqT); window._hqT = setTimeout(function () { render(); var i = $('#hq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); }
   if (k === 's2') { F.summa2 = e.target.value.replace(',', '.'); F.s2edited = true; }
   if (k === 'fmtnum') { e.target.value = fmtInput(e.target.value); }
+  if (k === 'rjIn') { e.target.value = fmtInput(e.target.value); rjPreview(); }
   if (k === 'revv' && R) { var id = e.target.dataset.v; e.target.value = fmtInput(e.target.value); R.val[id] = e.target.value; var a = accById(id), d = e.target.value === '' ? 0 : parseNum(e.target.value) - (balances()[id] || 0), el = $('#rd_' + id); if (el) { el.textContent = d ? 'Farq: ' + fmt(d, a.valyuta, { plus: true }) : ''; el.style.color = d ? 'var(--amber,#A15C07)' : ''; } }
   if (k === 'emoji') { var v = e.target.value.trim(); if (v) { window._catIcon = v; $('#cPrev').innerHTML = ic(v, 24); document.querySelectorAll('#cE .emojis button').forEach(function (b) { b.classList.remove('on'); }); } }
 });
