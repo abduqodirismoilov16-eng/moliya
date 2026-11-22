@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F4F7FE">
 <meta name="color-scheme" content="light dark">
+<title>Abduqodir · Moliya</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -12,8 +14,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Moliya">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>Abduqodir · Moliya</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
@@ -191,7 +191,7 @@ select.inp{appearance:none}
 .lk-keys button{width:76px;height:76px;border-radius:38px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:30px;font-weight:600;display:flex;align-items:center;justify-content:center}
 .lk-keys button:active{background:rgba(255,255,255,.28);transform:scale(.94)}
 .lk-keys button[data-k=bio],.lk-keys button[data-k=del]{background:transparent}
-.qpill{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.qpill.bad{background:#C42B3C}.qpill{cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#0B1530;color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:600;z-index:60;display:none;max-width:calc(100% - 40px);box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .loading{display:flex;align-items:center;justify-content:center;min-height:70vh;flex-direction:column;gap:14px;color:var(--hdr);font-weight:600}
 .spin{width:36px;height:36px;border-radius:50%;border:3px solid var(--track);border-top-color:var(--pri);animation:sp 1s linear infinite}
@@ -326,7 +326,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 <div id="add"></div>
 <div class="overlay" id="sheet" data-a="closeSheetBg"><div class="panel" id="panel"></div></div>
 <div class="toast" id="toast"></div>
-<div class="qpill" id="qpill" role="status"></div>
+<div class="qpill" id="qpill" role="status" data-a="queueSheet"></div>
 <input type="file" id="fileIn" accept=".csv,text/csv" style="display:none">
 
 <script>
@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '4.5';
+var VERSION = '5.0';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -486,21 +486,84 @@ function short(n, c) {
 }
 function haptic(t) { try { if (TG) TG.HapticFeedback.impactOccurred(t || 'light'); else if (navigator.vibrate) navigator.vibrate(8); } catch (e) {} }
 function toast(t, ms) { var e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function () { e.style.display = 'none'; }, ms || 2600); }
-function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function rawStore(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+// Maxfiy kalitlar (kirish kaliti, kesh, navbat) xotirada ochiq, telefonda faqat shifrlangan holda yotadi
+function store(k, v) {
+  if (!SECK[k]) return rawStore(k, v);
+  if (v === undefined) return SEC.mem[k] == null ? null : SEC.mem[k];
+  if (v === null) delete SEC.mem[k]; else SEC.mem[k] = String(v);
+  secWrite(k);
+}
+
+/* ================= XAVFSIZ SAQLASH (5.0) ================= */
+// AES-GCM bilan shifrlanadi. Shifr kaliti IndexedDB'da "chiqarib bo'lmaydigan" holda turadi:
+// telefon xotirasi yoki brauzer fayllari nusxalansa ham, ularni boshqa joyda ochib bo'lmaydi.
+var SECK = { moliya_tok: 1, moliya_devid: 1, moliya_cache: 1, moliya_queue: 1 };
+var SEC = { key: null, mem: {} };
+function b64big(u8) { var s = '', i; for (i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(s); }
+function secInit() {
+  try {
+    if (!window.indexedDB || !window.crypto || !crypto.subtle) throw new Error('no crypto');
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open('moliya', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('k'); };
+      r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
+    }).then(function (db) {
+      return new Promise(function (res, rej) { var g = db.transaction('k').objectStore('k').get('aes'); g.onsuccess = function () { res(g.result); }; g.onerror = function () { rej(g.error); }; })
+        .then(function (k) {
+          if (k) return k;
+          return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(function (k2) {
+            return new Promise(function (res, rej) { var t = db.transaction('k', 'readwrite'); t.objectStore('k').put(k2, 'aes'); t.oncomplete = function () { res(k2); }; t.onerror = function () { rej(t.error); }; });
+          });
+        });
+    }).then(function (k) {
+      SEC.key = k;
+      return Promise.all(Object.keys(SECK).map(function (n) {
+        var raw = rawStore(n); if (raw == null) return null;
+        if (raw.indexOf('enc1:') !== 0) { SEC.mem[n] = raw; return secWrite(n); } // eski ochiq yozuv: shifrlab qayta yozamiz
+        var b = unb64(raw.slice(5));
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(0, 12) }, k, b.slice(12))
+          .then(function (pt) { SEC.mem[n] = new TextDecoder().decode(pt); }, function () { console.warn('ochilmadi', n); });
+      }));
+    }).catch(function (e) { console.warn('secInit', e); secFallback(); });
+  } catch (e) { secFallback(); return Promise.resolve(); }
+}
+// Shifrlash imkoni bo'lmagan eski brauzer: avvalgidek ishlaydi
+function secFallback() { SEC.key = null; Object.keys(SECK).forEach(function (n) { var r = rawStore(n); if (r != null && r.indexOf('enc1:') !== 0) SEC.mem[n] = r; }); }
+function secWrite(n) {
+  var v = SEC.mem[n];
+  if (v == null) { rawStore(n, null); return Promise.resolve(); }
+  if (!SEC.key) { rawStore(n, v); return Promise.resolve(); }
+  var iv = rnd(12);
+  return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, SEC.key, new TextEncoder().encode(v)).then(function (ct) {
+    if (SEC.mem[n] !== v) return; // shu orada yangisi yozildi
+    var all = new Uint8Array(12 + ct.byteLength); all.set(iv); all.set(new Uint8Array(ct), 12);
+    rawStore(n, 'enc1:' + b64big(all));
+  });
+}
+// 4.x dan o'tish: serverga yuboriladigan PIN endi yo'q. Qulf yoqilgan bo'lsa, o'sha raqamlar mahalliy qulf PIN'i bo'lib qoladi (xeshlangan)
+function migrateV5() {
+  var old = rawStore('moliya_pin'); if (old == null) return Promise.resolve();
+  var fin = function () { rawStore('moliya_pin', null); };
+  window._oldPin = true;
+  if (rawStore('moliya_lock') === '1' && !rawStore('moliya_lockh') && /^\d{4,8}$/.test(old) && window.crypto && crypto.subtle) return setLockPin(old).then(fin, fin);
+  if (rawStore('moliya_lock') === '1') { rawStore('moliya_lock', null); rawStore('moliya_bio', null); }
+  fin(); return Promise.resolve();
+}
 function ask(msg) { return new Promise(function (ok) { if (TG && TG.showConfirm) TG.showConfirm(msg, function (y) { if (y) ok(); }); else if (confirm(msg)) ok(); }); }
 function openUrl(u) { if (TG) TG.openLink(u); else window.open(u, '_blank'); }
 function parseNum(s) { var n = Number(String(s).replace(/\s| /g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
 function fmtInput(v) { var n = String(v).replace(/[^\d.,]/g, '').replace(',', '.'); var p = n.split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' '); return p.slice(0, 2).join('.'); }
 
 /* ---------------- Server bilan aloqa ---------------- */
-function auth() { return TG ? { tg: TG.initData } : { pin: store('moliya_pin') || '' }; }
+function auth() { return TG ? { tg: TG.initData } : { dev: store('moliya_tok') || '' }; }
 function apiUrl() { return API_URL || store('moliya_api') || ''; }
 function api(fn) { return api_(fn, Array.prototype.slice.call(arguments, 1), false); }
 function api_(fn, args, quiet) {
   return new Promise(function (ok, fail) {
     var onErr = function (e) {
       var m = String(e && e.message || e).replace(/^Error:\s*/, '');
-      if (/^(AUTH|PIN_NOT_SET)$/.test(m) && !TG) { store('moliya_pin', null); showPin(m === 'PIN_NOT_SET'); }
+      if (/^(AUTH|PAIR_NEEDED)$/.test(m) && !TG && fn !== 'pair') { store('moliya_tok', null); store('moliya_devid', null); showPair(m === 'PAIR_NEEDED'); }
       else if (!quiet && !(fn === 'saveTransaction' && isNetErr(e))) toast('Xato: ' + m, 4000);
       fail(e);
     };
@@ -517,7 +580,7 @@ function api_(fn, args, quiet) {
 }
 function load() {
   if (!IN_GAS && !apiUrl()) return showSetupUrl();
-  if (!TG && !store('moliya_pin')) return showPin(false);
+  if (!TG && !store('moliya_tok')) return showPair(!!window._oldPin);
   return api('getData').then(set);
 }
 function set(d) {
@@ -968,8 +1031,10 @@ function vSettings() {
   var lt = function (on) { return '<span class="toggle ' + (on ? 'on' : '') + '" role="switch" aria-checked="' + on + '"></span>'; };
   if (!tg) h += '<div class="label-up">Xavfsizlik</div><div class="glass list">' +
     row('lockTog', '', 'lock', 'Ilovani PIN bilan qulflash', lt(lockOn())) +
+    (lockOn() ? row('lockChange', '', 'lock', 'Qulf PIN\'ini almashtirish') : '') +
     (BIO_OK && lockOn() ? row('bioTog', '', 'finger', 'Barmoq izi / yuz bilan ochish', lt(bioOn())) : '') +
-    row('logout', '', 'logout', 'Chiqish (PIN qayta so\'raladi)', '', true) + '</div>' +
+    row('devices', '', 'phone', 'Ulangan qurilmalar') +
+    row('logout', '', 'logout', 'Shu telefonni uzish', '', true) + '</div>' +
     (IN_GAS ? '<div class="muted small" style="margin:6px 6px 0">Barmoq izi va yuz bilan ochish faqat telefonga o\'rnatilgan "Moliya" ilovasida ishlaydi.</div>' : '');
   h += '<div class="muted small" style="text-align:center;margin:22px 0"><div style="margin-bottom:8px">' + logo(40) + '</div>Abduqodir · Moliya ' + VERSION + ' · ma\'lumotlar faqat sizning Google jadvalingizda</div>';
   return h + '</div>';
@@ -1378,7 +1443,8 @@ function vAnalysis() {
 /* ================= OFLAYN NAVBAT (3-bosqich) ================= */
 function queue(v) { if (v === undefined) { try { return JSON.parse(store('moliya_queue') || '[]'); } catch (e) { return []; } } store('moliya_queue', v.length ? JSON.stringify(v) : null); updQ(); }
 function cid() { return Math.random().toString(16).slice(2, 12); }
-function isNetErr(e) { var m = String(e && e.message || e); return !navigator.onLine || /network|internet|aloqa|fetch|timeout|failed to|NetworkError/i.test(m); }
+function isNetErr(e) { var m = String(e && e.message || e); return !navigator.onLine || /network|internet|aloqa|fetch|timeout|failed to|NetworkError|BUSY/i.test(m); }
+function isAuthErr(e) { return /^(Error:\s*)?(AUTH|PAIR_NEEDED)$/.test(String(e && e.message || e)); }
 function applyQueue(d) {
   queue().forEach(function (t) {
     var i = d.transactions.findIndex(function (x) { return x.id === t.id; });
@@ -1389,33 +1455,59 @@ function applyQueue(d) {
   return d;
 }
 function updQ() {
-  var n = queue().length, e = $('#qpill'); if (!e) return;
+  var q = queue(), n = q.length, bad = q.filter(function (x) { return x._err; }).length, e = $('#qpill'); if (!e) return;
   e.style.display = n ? 'flex' : 'none';
-  e.innerHTML = ic('wifi', 14) + '<span>' + n + ' ta amal yuborilmagan</span>';
+  e.className = 'qpill' + (bad ? ' bad' : '');
+  e.innerHTML = ic('wifi', 14) + '<span>' + (bad ? bad + ' ta amalni tekshirish kerak' + (n > bad ? ' · ' + (n - bad) + ' ta navbatda' : '') : n + ' ta amal yuborilmagan') + '</span>';
 }
+// Navbatdagi amal HECH QACHON o'z-o'zidan o'chmaydi: tarmoq/server band bo'lsa kutadi,
+// boshqa xato bo'lsa "tekshirish kerak" deb belgilanadi va siz o'zingiz qaror qilasiz
 var _flushing = false;
 function flushQueue() {
-  var q = queue(); if (!q.length || _flushing || !navigator.onLine) return Promise.resolve();
+  var q = queue().filter(function (x) { return !x._err; }); if (!q.length || _flushing || !navigator.onLine) return Promise.resolve();
+  if (!TG && !store('moliya_tok')) return Promise.resolve();
   _flushing = true;
-  var t = Object.assign({}, q[0]); delete t._q;
+  var t = Object.assign({}, q[0]); delete t._q; delete t._err;
   return api_('saveTransaction', [t], true).then(function (d) {
     queue(queue().filter(function (x) { return x.id !== t.id; }));
     _flushing = false;
-    if (queue().length) return flushQueue();
+    if (queue().filter(function (x) { return !x._err; }).length) return flushQueue();
     set(d); toast('Internetsiz saqlangan amallar yuborildi ✓');
   }).catch(function (e) {
     _flushing = false;
-    if (!isNetErr(e)) { queue(queue().filter(function (x) { return x.id !== t.id; })); toast('Bitta amal saqlanmadi: ' + String(e && e.message || e).replace(/^Error:\s*/, ''), 5000); }
+    if (isNetErr(e) || isAuthErr(e)) return; // keyinroq yana urinamiz
+    var m = String(e && e.message || e).replace(/^Error:\s*/, '');
+    queue(queue().map(function (x) { return x.id === t.id ? Object.assign({}, x, { _err: m }) : x; }));
+    toast('Bitta amal yuborilmadi, tekshiring: ' + m, 5000);
+    return flushQueue();
   });
 }
-window.addEventListener('online', function () { flushQueue(); });
+function queueSheet() {
+  var q = queue(); if (!q.length) return closeSheet();
+  sheet('<h3>Yuborilmagan amallar</h3><div class="muted small" style="margin-bottom:10px">Bu amallar faqat shu telefonda turibdi. Internet yoki server tayyor bo\'lganda o\'zi yuboriladi. Qizil belgilanganlarini server qabul qilmadi: qayta yuboring yoki o\'chiring.</div><div class="glass list">' +
+    q.map(function (t) {
+      var c = !D || t.turi === 'otkazma' ? null : catById(t.kategoriya), a = D ? accById(t.hisob) : null;
+      return '<div class="li" style="flex-wrap:wrap"><span class="mid"><div class="t" style="font-weight:600">' + (t.turi === 'kirim' ? '+' : t.turi === 'chiqim' ? '−' : '') + fmt(t.summa, a ? a.valyuta : 'UZS') + ' · ' + esc(c ? c.nomi : (t.turi === 'otkazma' ? 'O\'tkazma' : '')) + '</div><div class="s">' + esc(t.sana) + (a ? ' · ' + esc(a.nomi) : '') + (t.izoh ? ' · ' + esc(t.izoh) : '') + '</div>' +
+        (t._err ? '<div class="s" style="color:var(--red,#C42B3C)">' + esc(t._err) + '</div>' : '') + '</span>' +
+        '<span style="display:flex;gap:8px;width:100%;justify-content:flex-end;margin-top:8px">' + (t._err ? '<button class="btn" style="padding:8px 12px;width:auto" data-a="qRetry" data-v="' + t.id + '">Qayta</button>' : '') + '<button class="btn" style="padding:8px 12px;width:auto" data-a="qDel" data-v="' + t.id + '">O\'chirish</button></span></div>';
+    }).join('') + '</div>');
+}
 setInterval(flushQueue, 30000);
 
 /* ================= ILOVA QULFI: PIN, barmoq izi, yuz ================= */
 // Qulf faqat shu telefonda ishlaydi. Barmoq izi/yuzni telefonning o'zi tekshiradi (WebAuthn),
 // biometrik ma'lumot hech qayerga yuborilmaydi.
 var LOCK = { on: false, bio: false, hiddenAt: 0, wrong: 0, until: 0, entry: '' };
-function lockOn() { return store('moliya_lock') === '1' && !!store('moliya_pin') && !TG; }
+function lockOn() { return store('moliya_lock') === '1' && !!lockInfo() && !TG; }
+// Qulf PIN'i faqat shu telefonda, PBKDF2 xeshi ko'rinishida saqlanadi va serverga yuborilmaydi
+function lockInfo() { try { return JSON.parse(store('moliya_lockh') || 'null'); } catch (e) { return null; } }
+function pinHash(pin, salt) {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits'])
+    .then(function (k) { return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: 150000 }, k, 256); }).then(b64);
+}
+function setLockPin(pin) { var sl = rnd(16); return pinHash(pin, sl).then(function (h) { store('moliya_lockh', JSON.stringify({ s: b64(sl), h: h, n: pin.length })); }); }
+function checkLockPin(pin) { var i = lockInfo(); if (!i) return Promise.resolve(false); return pinHash(pin, unb64(i.s)).then(function (h) { return h === i.h; }); }
+function lockWait() { try { return JSON.parse(store('moliya_lockw') || '{"w":0,"u":0}'); } catch (e) { return { w: 0, u: 0 }; } }
 function bioOn() { return lockOn() && !!store('moliya_bio'); }
 function bioAvail() {
   try { if (!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false); return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; }); } catch (e) { return Promise.resolve(false); }
@@ -1438,7 +1530,7 @@ function bioCheck() {
 function showLock() {
   if (!lockOn() || $('#lock')) return;
   LOCK.entry = '';
-  var n = String(store('moliya_pin')).length, el = document.createElement('div');
+  var n = (lockInfo() || {}).n || 4, el = document.createElement('div');
   el.id = 'lock';
   el.innerHTML = '<div class="lk-top">' + logo(64) + '<div class="lk-t">Abduqodir · Moliya</div><div class="lk-s" id="lkMsg">' + (bioOn() ? 'Barmoq izi, yuz yoki PIN bilan oching' : 'PIN kodni kiriting') + '</div>' +
     '<div class="lk-dots" id="lkDots">' + new Array(n + 1).join('<i></i>') + '</div></div>' +
@@ -1456,18 +1548,22 @@ function lockDots() { var d = document.querySelectorAll('#lkDots i'); d.forEach(
 function lockKey(k) {
   haptic();
   if (k === 'bio') return lockBio();
-  if (Date.now() < LOCK.until) return lockMsg('Biroz kuting: ' + Math.ceil((LOCK.until - Date.now()) / 1000) + ' soniya', true);
+  var lw = lockWait();
+  if (Date.now() < lw.u) return lockMsg('Biroz kuting: ' + Math.ceil((lw.u - Date.now()) / 1000) + ' soniya', true);
   if (k === 'del') { LOCK.entry = LOCK.entry.slice(0, -1); return lockDots(); }
-  var pin = String(store('moliya_pin'));
-  if (LOCK.entry.length >= pin.length) return;
+  var n = (lockInfo() || {}).n || 4;
+  if (LOCK.entry.length >= n || LOCK.busy) return;
   LOCK.entry += k; lockDots();
-  if (LOCK.entry.length === pin.length) setTimeout(function () {
-    if (LOCK.entry === pin) return unlock();
-    LOCK.wrong++; LOCK.entry = ''; lockDots();
+  if (LOCK.entry.length === n) { LOCK.busy = true; checkLockPin(LOCK.entry).then(function (ok) {
+    LOCK.busy = false;
+    if (ok) { store('moliya_lockw', null); return unlock(); }
+    LOCK.entry = ''; lockDots(); lw = lockWait(); lw.w++;
     var d = $('#lkDots'); if (d) d.animate([{ transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'none' }], 260);
-    if (LOCK.wrong >= 5) { LOCK.until = Date.now() + 30000; LOCK.wrong = 0; lockMsg('5 marta xato. 30 soniyadan keyin urining', true); }
+    // Har 5 ta xatodan keyin kutish 2 baravar uzayadi: 30 s, 1 daq, 2 daq, 4 daq...
+    if (lw.w % 5 === 0) { var sec = 30 * Math.pow(2, Math.min(lw.w / 5 - 1, 10)); lw.u = Date.now() + sec * 1000; lockMsg(lw.w + ' marta xato. ' + (sec < 60 ? sec + ' soniya' : Math.round(sec / 60) + ' daqiqa') + ' kuting', true); }
     else lockMsg('PIN noto\'g\'ri', true);
-  }, 120);
+    store('moliya_lockw', JSON.stringify(lw));
+  }, function () { LOCK.busy = false; LOCK.entry = ''; lockDots(); }); }
 }
 function lockBio() {
   if (!bioOn()) return;
@@ -1745,10 +1841,29 @@ var act = {
   setBase: function (c) { D.settings.asosiy_valyuta = c; closeSheet(); render(); api('saveSettings', { asosiy_valyuta: c }); },
   theme: function () { sheet('<h3>Mavzu</h3><div class="glass list">' + Object.keys(THEMES).map(function (k) { var on = (setv('mavzu') || 'tizim') === k; return '<button class="li" data-a="setTheme" data-v="' + k + '"><span class="orb o40' + (on ? ' pri' : '') + '">' + ic(THEMES[k][0], 18) + '</span><span class="mid"><div class="t">' + THEMES[k][1] + '</div>' + (k === 'tizim' ? '<div class="s">Telefon sozlamasiga qarab o\'zi almashadi</div>' : '') + '</span>' + (on ? ic('check', 18) : '') + '</button>'; }).join('') + '</div>'); },
   lockTog: function () {
-    if (lockOn()) { store('moliya_lock', null); store('moliya_bio', null); toast('Qulf o\'chirildi'); }
-    else { store('moliya_lock', '1'); toast('Endi ilova har ochilganda PIN so\'raydi'); }
-    render();
+    if (lockOn()) { store('moliya_lock', null); store('moliya_bio', null); store('moliya_lockh', null); toast('Qulf o\'chirildi'); return render(); }
+    lockPinSheet(false);
   },
+  lockChange: function () { lockPinSheet(true); },
+  lockSave: function (v, el) {
+    var a = $('#lp1').value.trim(), b = $('#lp2').value.trim();
+    if (!/^\d{4,8}$/.test(a)) return toast('PIN 4–8 ta raqamdan iborat bo\'lsin');
+    if (a !== b) return toast('PIN\'lar bir xil emas');
+    if (/^(\d)\1+$/.test(a) || '0123456789'.indexOf(a) >= 0 || '9876543210'.indexOf(a) >= 0) return toast('Juda oson PIN. Boshqasini tanlang');
+    if (!(window.crypto && crypto.subtle)) return toast('Bu brauzerda qulfni yoqib bo\'lmaydi');
+    el.disabled = true;
+    setLockPin(a).then(function () { store('moliya_lock', '1'); store('moliya_lockw', null); closeSheet(); render(); toast('Qulf yoqildi. PIN faqat shu telefonda saqlanadi'); });
+  },
+  devices: function () { devicesSheet(); },
+  devDel: function (id, el) {
+    ask('Bu qurilma uziladi va qayta kirish uchun yangi kod kerak bo\'ladi. Davom etasizmi?').then(function () {
+      el.disabled = true;
+      api('revokeDevice', id).then(function (list) { if (id === store('moliya_devid')) return localLogout(); devicesSheet(list); toast('Qurilma uzildi'); });
+    });
+  },
+  queueSheet: function () { queueSheet(); },
+  qRetry: function (id) { queue(queue().map(function (x) { if (x.id === id) { x = Object.assign({}, x); delete x._err; } return x; })); closeSheet(); flushQueue(); },
+  qDel: function (id) { ask('Bu amal butunlay o\'chiriladi. Ishonchingiz komilmi?').then(function () { queue(queue().filter(function (x) { return x.id !== id; })); if (D) { D.transactions = D.transactions.filter(function (x) { return !(x._q && x.id === id); }); _bal = null; render(); api_('getData', [], true).then(set, function () {}); } queueSheet(); }); },
   bioTog: function () {
     if (bioOn()) { store('moliya_bio', null); toast('Barmoq izi/yuz o\'chirildi'); return render(); }
     bioRegister().then(function () { toast('Barmoq izi/yuz yoqildi'); render(); }).catch(function (e) { toast('Yoqilmadi: telefonda ekran qulfi (barmoq izi yoki yuz) sozlanganini tekshiring', 4500); });
@@ -1765,7 +1880,13 @@ var act = {
   import: function () { importSheet(); },
   pickFile: function () { var f = $('#fileIn'); f.value = ''; f.onchange = function () { var file = f.files[0]; if (!file) return; var r = new FileReader(); r.onload = function () { try { var rows = mapImport(parseCSV(r.result)); if (!rows.length) throw new Error('Mos qatorlar topilmadi'); importSheet(rows); } catch (e) { importSheet(null, e.message); } }; r.readAsText(file, 'utf-8'); }; f.click(); },
   doImport: function (v, el) { el.disabled = true; el.textContent = 'Import qilinmoqda…'; api('importRows', window._imp).then(function (d) { closeSheet(); set(d); toast(d.imported + ' ta amal import qilindi ✓', 4000); }).catch(function () { el.disabled = false; }); },
-  logout: function () { ask('Chiqasizmi? Keyingi safar PIN so\'raladi.').then(function () { store('moliya_pin', null); store('moliya_cache', null); store('moliya_lock', null); store('moliya_bio', null); D = null; showPin(false); }); }
+  logout: function () {
+    var n = queue().length;
+    ask((n ? 'Diqqat: ' + n + ' ta amal hali serverga yuborilmagan va o\'chib ketadi. ' : '') + 'Shu telefon uziladi, keyin kirish uchun yangi kod kerak bo\'ladi. Davom etasizmi?').then(function () {
+      var id = store('moliya_devid');
+      (id ? api_('revokeDevice', [id], true) : Promise.resolve()).catch(function () {}).then(localLogout);
+    });
+  }
 };
 
 document.addEventListener('click', function (e) {
@@ -1784,14 +1905,48 @@ document.addEventListener('input', function (e) {
 });
 
 /* ================= KIRISH ================= */
-function showPin(notSet) {
+function localLogout() { ['moliya_tok', 'moliya_devid', 'moliya_cache', 'moliya_queue', 'moliya_lock', 'moliya_lockh', 'moliya_lockw', 'moliya_bio'].forEach(function (k) { store(k, null); }); D = null; closeSheet(); showPair(false); }
+function devName() {
+  var u = navigator.userAgent, m = /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android telefon' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows kompyuter' : 'Qurilma';
+  var pwa = window.matchMedia && matchMedia('(display-mode: standalone)').matches;
+  return m + (pwa ? ' · ilova' : IN_GAS ? ' · Google sahifa' : ' · brauzer');
+}
+function showPair(old) {
   $('#tabs').style.display = 'none';
-  $('#app').innerHTML = '<div class="glass pin">' + logo(72) + '<h2 style="margin:14px 0 4px">Abduqodir · Moliya</h2><div class="muted">PIN kodni kiriting</div>' +
-    (notSet ? '<div class="small warn b" style="margin-top:10px">PIN hali o\'rnatilmagan. Google jadvalda: 💰 Moliya → PIN kod o\'rnatish</div>' : '') +
-    '<input class="inp" id="pinIn" type="password" inputmode="numeric" autocomplete="current-password" aria-label="PIN kod"><button class="btn btn-pri" id="pinBtn">Kirish</button></div>';
-  var i = $('#pinIn'), go = function () { var v = i.value.trim(); if (!v) return; store('moliya_pin', v); $('#app').innerHTML = '<div class="loading"><div class="spin"></div>Yuklanmoqda…</div>'; load(); };
-  $('#pinBtn').onclick = go; i.onkeydown = function (e) { if (e.key === 'Enter') go(); };
+  $('#app').innerHTML = '<div class="glass pin">' + logo(72) + '<h2 style="margin:14px 0 4px">Abduqodir · Moliya</h2><div class="muted">Telefonni ulash</div>' +
+    (old ? '<div class="small b" style="margin-top:10px">Xavfsizlik yangilandi: endi PIN o\'rniga bir martalik kod ishlatiladi.</div>' : '') +
+    '<div class="muted small" style="margin-top:12px;text-align:left">Kodni oling:<br>• Telegram botga <b>/ulash</b> deb yozing, yoki<br>• Google jadvalda <b>💰 Moliya → 2. Qurilma ulash kodi</b>.</div>' +
+    '<input class="inp" id="pairIn" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-label="6 xonali kod"><button class="btn btn-pri" id="pairBtn">Ulash</button></div>';
+  var i = $('#pairIn'), btn = $('#pairBtn'), go = function () {
+    var v = i.value.replace(/\D/g, ''); if (v.length !== 6) return toast('6 xonali kodni kiriting');
+    btn.disabled = true;
+    api_('pair', [v, devName()], true).then(function (r) {
+      store('moliya_tok', r.token); store('moliya_devid', r.id);
+      $('#app').innerHTML = '<div class="loading"><div class="spin"></div>Yuklanmoqda…</div>';
+      var l = load(); if (l && l.then) l.then(flushQueue);
+    }).catch(function (e) {
+      btn.disabled = false; i.value = '';
+      var m = String(e && e.message || e).replace(/^Error:\s*/, '');
+      toast(m === 'PAIR_WRONG' ? 'Kod noto\'g\'ri. Qayta kiriting' : m === 'PAIR_EXPIRED' ? 'Kod eskirgan yoki bekor qilingan. Yangisini oling (/ulash)' : isNetErr(e) ? 'Internet yoki server bilan aloqa yo\'q' : 'Xato: ' + m, 4000);
+    });
+  };
+  btn.onclick = go; i.onkeydown = function (e) { if (e.key === 'Enter') go(); };
   setTimeout(function () { i.focus(); }, 80);
+}
+function lockPinSheet(change) {
+  sheet('<h3>' + (change ? 'Qulf PIN\'ini almashtirish' : 'Ilova qulfi') + '</h3><div class="muted small" style="margin-bottom:12px">4–8 xonali PIN tanlang. U faqat shu telefonda saqlanadi va serverga yuborilmaydi. Har 5 ta xatodan keyin kutish vaqti uzayadi.</div>' +
+    '<input class="inp" id="lp1" type="password" inputmode="numeric" maxlength="8" placeholder="Yangi PIN" autocomplete="new-password"><div style="height:10px"></div>' +
+    '<input class="inp" id="lp2" type="password" inputmode="numeric" maxlength="8" placeholder="PIN\'ni takrorlang" autocomplete="new-password"><div style="height:14px"></div>' +
+    '<button class="btn btn-pri" data-a="lockSave">Saqlash</button>');
+}
+function devicesSheet(list) {
+  if (!list) { sheet('<h3>Ulangan qurilmalar</h3><div class="loading"><div class="spin"></div></div>'); return api('listDevices').then(devicesSheet); }
+  var f = function (t) { if (!t) return '-'; var d = new Date(t); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  var me = store('moliya_devid');
+  sheet('<h3>Ulangan qurilmalar</h3><div class="muted small" style="margin-bottom:10px">Ilovaga faqat shu qurilmalardan kirish mumkin. Tanimagan qurilmani darhol uzing. Telegram ichidagi ilova bu ro\'yxatga kirmaydi, u Telegram akkauntingiz bilan tekshiriladi.</div><div class="glass list">' +
+    (list.length ? list.map(function (d) {
+      return '<div class="li"><span class="orb o40">' + ic('phone', 18) + '</span><span class="mid"><div class="t" style="font-weight:600">' + esc(d.nomi) + (d.id === me ? ' <span class="muted small">(shu telefon)</span>' : '') + '</div><div class="s">Ulangan ' + f(d.ulangan) + ' · oxirgi kirish ' + f(d.oxirgi) + '</div></span><button class="btn" style="padding:8px 12px;width:auto" data-a="devDel" data-v="' + esc(d.id) + '">Uzish</button></div>';
+    }).join('') : '<div class="li"><span class="mid muted">Hozircha qurilma yo\'q</span></div>') + '</div>');
 }
 function showSetupUrl() {
   $('#tabs').style.display = 'none';
@@ -1806,14 +1961,14 @@ function showSetupUrl() {
 }
 if (window.matchMedia) try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { if (D) applyTheme(); }); } catch (e) {}
 
-// Keshdan darhol ko'rsatish, keyin serverdan yangilash
-(function start() {
+// Avval shifrlangan xotirani ochamiz, keyin keshdan darhol ko'rsatib, serverdan yangilaymiz
+secInit().then(migrateV5).catch(function (e) { console.warn(e); }).then(function start() {
   if (lockOn() && !(Date.now() - Number(store('moliya_seen') || 0) < 60000)) showLock();
   var c = store('moliya_cache');
-  if (c && (TG || store('moliya_pin'))) { try { D = JSON.parse(c); applyTheme(); render(); } catch (e) {} }
+  if (c && (TG || store('moliya_tok'))) { try { D = JSON.parse(c); applyQueue(D); applyTheme(); render(); } catch (e) {} }
   updQ();
   var l = load(); if (l && l.then) l.then(flushQueue, function () { if (D) toast('Oflayn rejim: oxirgi saqlangan ma\'lumotlar ko\'rsatilmoqda', 3500); });
-})();
+});
 </script>
 <script>
 /* Alohida ilova (PWA): internetsiz ochilish va yangilanish */
