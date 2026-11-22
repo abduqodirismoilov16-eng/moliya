@@ -191,7 +191,7 @@ select.inp{appearance:none}
 .lk-keys button{width:76px;height:76px;border-radius:38px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:30px;font-weight:600;display:flex;align-items:center;justify-content:center}
 .lk-keys button:active{background:rgba(255,255,255,.28);transform:scale(.94)}
 .lk-keys button[data-k=bio],.lk-keys button[data-k=del]{background:transparent}
-.eyeb{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;border:0;padding:0;background:rgba(33,72,201,.08);color:var(--ink2,#3A4670);cursor:pointer;flex:none}.eyeb.dk{background:rgba(255,255,255,.16);color:#fff}.qpill.bad{background:#C42B3C}.qpill{cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.pend{display:inline-flex;vertical-align:-1px;margin-right:5px;color:var(--pri,#2148C9);opacity:.75;animation:pendSpin 1.4s linear infinite}@keyframes pendSpin{to{transform:rotate(360deg)}}.eyeb{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;border:0;padding:0;background:rgba(33,72,201,.08);color:var(--ink2,#3A4670);cursor:pointer;flex:none}.eyeb.dk{background:rgba(255,255,255,.16);color:#fff}.qpill.bad{background:#C42B3C}.qpill{cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#0B1530;color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:600;z-index:60;display:none;max-width:calc(100% - 40px);box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .loading{display:flex;align-items:center;justify-content:center;min-height:70vh;flex-direction:column;gap:14px;color:var(--hdr);font-weight:600}
 .spin{width:36px;height:36px;border-radius:50%;border:3px solid var(--track);border-top-color:var(--pri);animation:sp 1s linear infinite}
@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '5.1.2';
+var VERSION = '5.2';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -791,6 +791,7 @@ function txRow(t, opt) {
   if (t.turi === 'otkazma') { c = { nomi: "O'tkazma", belgi: 'swap' }; sub = esc(a.nomi) + ' → ' + esc(accById(t.hisobga).nomi); }
   else { c = catById(t.kategoriya); sub = esc(a.nomi) + (t.izoh ? ' · ' + esc(t.izoh) : ''); }
   if (opt && opt.date) sub = dayLabel(t.sana) + ' · ' + sub;
+  if (t._q) sub = '<span class="pend">' + ic('repeat', 11, 2.4) + '</span>' + sub;
   var cls = t.turi === 'kirim' ? 'inc' : t.turi === 'chiqim' ? 'exp' : '';
   if (opt && opt.acc && t.turi === 'otkazma') { var dd = accDelta(t, opt.acc); cls = dd > 0 ? 'inc' : 'exp'; return txRowHtml(t, c, sub, cls, fmt(dd, accById(opt.acc).valyuta, { plus: true })); }
   var amt = t.turi === 'otkazma' ? fmt(Number(t.summa), a.valyuta) : fmt(t.turi === 'kirim' ? Number(t.summa) : -Number(t.summa), a.valyuta, { plus: true });
@@ -1404,22 +1405,15 @@ function saveTx() {
   if (F.turi === 'otkazma' && (!F.hisobga || F.hisobga === F.hisob)) return toast('Ikki xil hisob tanlang');
   if (F.turi !== 'otkazma' && !String(F.izoh || '').trim() && /boshqa/i.test((D.categories.find(function (c) { return c.id === F.kategoriya; }) || {}).nomi || '')) { toast('"Boshqa" uchun qisqa izoh yozing: nima edi?', 3500); return act.note(); }
   var isNew = !F.id, t = { id: F.id || cid(), turi: F.turi, summa: v, hisob: F.hisob, kategoriya: F.turi === 'otkazma' ? '' : F.kategoriya, hisobga: F.turi === 'otkazma' ? F.hisobga : '', summa2: F.turi === 'otkazma' && F.summa2 ? parseNum(F.summa2) : '', sana: F.sana, izoh: F.izoh, kurs: F.kurs || '' };
-  var btn = $('#okBtn'); btn.disabled = true; btn.innerHTML = '<div class="spin" style="width:24px;height:24px;border-color:rgba(255,255,255,.35);border-top-color:#fff"></div>';
   store('moliya_acc_' + F.turi, F.hisob);
-  var after = function () { if (t.turi === 'chiqim') setTimeout(function () { budgetWarn(t); }, 900); };
-  if (!navigator.onLine) return saveOffline(t, after);
-  api('saveTransaction', t).then(function (d) {
-    closeAdd(); set(d); haptic('medium');
-    toast(isNew ? 'Saqlandi ✓' : 'Yangilandi ✓'); after();
-  }).catch(function (e) {
-    if (isNetErr(e)) return saveOffline(t, after);
-    btn.disabled = false; btn.innerHTML = ic('check', 26, 2.6);
-  });
-}
-function saveOffline(t, after) {
+  // 5.2: bir zumda saqlash. Amal avval telefonga (shifrlangan navbatga) yoziladi va darhol ko'rinadi,
+  // serverga orqa fonda yuboriladi. Navbatdagi amal hech qachon o'z-o'zidan o'chmaydi.
   var q = queue().filter(function (x) { return x.id !== t.id; }); q.push(Object.assign({ yaratilgan: new Date().toISOString() }, t)); queue(q);
   closeAdd(); set(D); haptic('medium');
-  toast('Internet yo\'q: telefonda saqlandi, aloqa tiklanganda o\'zi yuboriladi', 4000); after();
+  if (navigator.onLine) toast(isNew ? 'Saqlandi ✓' : 'Yangilandi ✓');
+  else toast('Internet yo\'q: telefonda saqlandi, aloqa tiklanganda o\'zi yuboriladi', 4000);
+  if (t.turi === 'chiqim') setTimeout(function () { budgetWarn(t); }, 900);
+  setTimeout(flushQueue, 0);
 }
 function budgetWarn(t) {
   var m = t.sana.slice(0, 7), lim = budgetOf(t.kategoriya); if (!lim) return;
@@ -1551,23 +1545,54 @@ function applyQueue(d) {
 }
 function updQ() {
   var q = queue(), n = q.length, bad = q.filter(function (x) { return x._err; }).length, e = $('#qpill'); if (!e) return;
-  e.style.display = n ? 'flex' : 'none';
+  var stale = !navigator.onLine || q.some(function (x) { return Date.now() - Date.parse(x.yaratilgan || 0) > 20000; });
+  e.style.display = n && (bad || stale) ? 'flex' : 'none';
   e.className = 'qpill' + (bad ? ' bad' : '');
   e.innerHTML = ic('wifi', 14) + '<span>' + (bad ? bad + ' ta amalni tekshirish kerak' + (n > bad ? ' · ' + (n - bad) + ' ta navbatda' : '') : n + ' ta amal yuborilmagan') + '</span>';
 }
 // Navbatdagi amal HECH QACHON o'z-o'zidan o'chmaydi: tarmoq/server band bo'lsa kutadi,
 // boshqa xato bo'lsa "tekshirish kerak" deb belgilanadi va siz o'zingiz qaror qilasiz
 var _flushing = false;
+var _batchOk = true; // server 5.2 dan eski bo'lsa (saveTxs yo'q), bittalab eski yo'l bilan yuboriladi
+function clean(x) { var t = Object.assign({}, x); delete t._q; delete t._err; return t; }
 function flushQueue() {
+  updQ();
   var q = queue().filter(function (x) { return !x._err; }); if (!q.length || _flushing || !navigator.onLine) return Promise.resolve();
   if (!TG && !store('moliya_tok')) return Promise.resolve();
+  if (!_batchOk) return flushOne(q);
   _flushing = true;
-  var t = Object.assign({}, q[0]); delete t._q; delete t._err;
+  var send = q.slice(0, 30).map(clean), old = q.some(function (x) { return Date.now() - Date.parse(x.yaratilgan || 0) > 60000; });
+  return api_('saveTxs', [send], true).then(function (r) {
+    _flushing = false;
+    var res = {}; (r && r.results || []).forEach(function (x) { res[x.id] = x; });
+    var bad = 0;
+    queue(queue().map(function (x) { var k = res[x.id]; if (k && k.err) { bad++; return Object.assign({}, x, { _err: k.err }); } return x; })
+      .filter(function (x) { return !(res[x.id] && res[x.id].ok); }));
+    // Telefondagi nusxada amal "yuborildi" bo'ladi: butun bazani qayta yuklash shart emas
+    if (D) {
+      D.transactions = D.transactions.map(function (x) { var k = res[x.id]; if (!k || !k.ok) return x; var n = clean(x); if (k.kurs !== undefined) n.kurs = k.kurs; return n; });
+      _bal = null; try { store('moliya_cache', JSON.stringify(D)); } catch (e) {} render();
+    }
+    if (bad) toast(bad + ' ta amal yuborilmadi, tekshiring', 5000);
+    else if (old) toast('Internetsiz saqlangan amallar yuborildi ✓');
+    if (queue().filter(function (x) { return !x._err; }).length) return flushQueue();
+  }).catch(function (e) {
+    _flushing = false;
+    if (/Noma.lum amal/.test(String(e && e.message || e))) { _batchOk = false; return flushQueue(); }
+    if (isNetErr(e) || isAuthErr(e)) return; // keyinroq yana urinamiz
+    // Kutilmagan xato: hech narsani o'chirmaymiz, bittalab yuborib, aybdorini aniqlaymiz
+    return flushOne(queue().filter(function (x) { return !x._err; }));
+  });
+}
+function flushOne(q) {
+  if (_flushing || !q.length) return Promise.resolve();
+  _flushing = true;
+  var t = clean(q[0]);
   return api_('saveTransaction', [t], true).then(function (d) {
     queue(queue().filter(function (x) { return x.id !== t.id; }));
     _flushing = false;
     if (queue().filter(function (x) { return !x._err; }).length) return flushQueue();
-    set(d); toast('Internetsiz saqlangan amallar yuborildi ✓');
+    set(d);
   }).catch(function (e) {
     _flushing = false;
     if (isNetErr(e) || isAuthErr(e)) return; // keyinroq yana urinamiz
@@ -1587,7 +1612,8 @@ function queueSheet() {
         '<span style="display:flex;gap:8px;width:100%;justify-content:flex-end;margin-top:8px">' + (t._err ? '<button class="btn" style="padding:8px 12px;width:auto" data-a="qRetry" data-v="' + t.id + '">Qayta</button>' : '') + '<button class="btn" style="padding:8px 12px;width:auto" data-a="qDel" data-v="' + t.id + '">O\'chirish</button></span></div>';
     }).join('') + '</div>');
 }
-setInterval(flushQueue, 30000);
+setInterval(flushQueue, 20000);
+window.addEventListener('online', function () { flushQueue(); });
 
 /* ================= ILOVA QULFI: PIN, barmoq izi, yuz ================= */
 // Qulf faqat shu telefonda ishlaydi. Barmoq izi/yuzni telefonning o'zi tekshiradi (WebAuthn),
@@ -1899,7 +1925,11 @@ var act = {
   pickDate: function () { var i = $('#dateIn'); i.onchange = function () { if (i.value) { F.sana = i.value; renderAdd(); } }; try { i.showPicker(); } catch (e) { i.style.pointerEvents = 'auto'; i.focus(); i.click(); } },
   note: function () { noteSheet(); },
   saveNote: function () { F.izoh = $('#noteIn').value.trim(); closeSheet(); renderAdd(); },
-  delTx: function () { ask("Bu amalni o'chirasizmi?").then(function () { return api('deleteTransaction', F.id); }).then(function (d) { closeAdd(); set(d); toast("O'chirildi"); }); },
+  delTx: function () { var id = F.id; ask("Bu amalni o'chirasizmi?").then(function () {
+    // Hali yuborilmagan bo'lsa navbatdan olib tashlanadi; yuborilayotgan bo'lsa, o'sha tugashini kutamiz (aks holda qayta paydo bo'lardi)
+    queue(queue().filter(function (x) { return x.id !== id; }));
+    return new Promise(function (ok) { var n = 0; (function w() { if (!_flushing || ++n > 150) ok(); else setTimeout(w, 200); })(); });
+  }).then(function () { return api('deleteTransaction', id); }).then(function (d) { closeAdd(); set(d); toast("O'chirildi"); }); },
   newCatFromAdd: function () { catSheet(null, F.turi); window._catFromAdd = true; },
   closeSheetBg: function (v, el, e) { if (e.target === el) closeSheet(); },
   editAcc: function (v) { accSheet(v); },
