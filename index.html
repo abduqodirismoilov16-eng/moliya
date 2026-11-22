@@ -191,7 +191,7 @@ select.inp{appearance:none}
 .lk-keys button{width:76px;height:76px;border-radius:38px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:30px;font-weight:600;display:flex;align-items:center;justify-content:center}
 .lk-keys button:active{background:rgba(255,255,255,.28);transform:scale(.94)}
 .lk-keys button[data-k=bio],.lk-keys button[data-k=del]{background:transparent}
-.qpill.bad{background:#C42B3C}.qpill{cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.eyeb{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;border:0;padding:0;background:rgba(33,72,201,.08);color:var(--ink2,#3A4670);cursor:pointer;flex:none}.eyeb.dk{background:rgba(255,255,255,.16);color:#fff}.qpill.bad{background:#C42B3C}.qpill{cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:55;display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:14px;background:#B26A00;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#0B1530;color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:600;z-index:60;display:none;max-width:calc(100% - 40px);box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .loading{display:flex;align-items:center;justify-content:center;min-height:70vh;flex-direction:column;gap:14px;color:var(--hdr);font-weight:600}
 .spin{width:36px;height:36px;border-radius:50%;border:3px solid var(--track);border-top-color:var(--pri);animation:sp 1s linear infinite}
@@ -338,7 +338,7 @@ nav.tabs button.fab{width:58px;height:58px;border-radius:20px;margin-top:-20px;b
 /* GitHub Pages / Telegram uchun: Apps Script "Web app" havolasi (…/exec).
    Apps Script ichida ochilganda kerak emas. */
 var API_URL = '';
-var VERSION = '5.1';
+var VERSION = '5.1.2';
 
 /* ---------------- Muhit ---------------- */
 var TG = window.Telegram && Telegram.WebApp && Telegram.WebApp.initData ? Telegram.WebApp : null;
@@ -436,6 +436,11 @@ function ic(n, s, w) { s = s || 20; if (isEmoji(n)) return '<span class="emo" st
 var D = null;
 var S = { tab: 'home', sub: null, month: ym(new Date()), statType: 'chiqim', hq: '', ht: 'all', hacc: '', hcat: '', catTab: 'chiqim', debtTab: 'oldim', debtSort: 'miqdor', debtArch: false, plan: 'limit', hide: false };
 try { S.hide = localStorage.getItem('moliya_hide') === '1'; } catch (e) {}
+// Har bir kartadagi summani alohida yashirish (5.1.2): HC[kalit] = 1, CTX = hozir chizilayotgan karta
+var HC = {}, CTX = null;
+try { HC = JSON.parse(localStorage.getItem('moliya_hidec') || '{}') || {}; } catch (e) {}
+function hid() { return S.hide || !!(CTX && HC[CTX]); }
+function eyeBtn(k, onDark, st) { return '<button class="eyeb' + (onDark ? ' dk' : '') + '" data-a="hideCard" data-v="' + esc(k) + '" aria-label="Shu kartadagi summani yashirish" style="' + (st || '') + '">' + ic(HC[k] || S.hide ? 'eyeoff' : 'eye', 16) + '</button>'; }
 var MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
 var MON3 = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
 var CUR = { UZS: "so'm", USD: '$', EUR: '€', RUB: '₽', KZT: '₸' };
@@ -463,7 +468,7 @@ function rate(c) { return c === 'UZS' ? 1 : (Number(setv('kurs_' + c)) || 1); }
 function conv(n, from, to) { to = to || base(); return from === to ? n : n * rate(from) / rate(to); }
 function fmt(n, c, o) {
   c = c || base(); o = o || {};
-  if (S.hide && !o.raw) return (o.noSym ? '' : (CUR[c] || c) === "so'm" ? "••••• so'm" : '••••• ' + (CUR[c] || c)).trim() || '•••••';
+  if (hid() && !o.raw) return (o.noSym ? '' : (CUR[c] || c) === "so'm" ? "••••• so'm" : '••••• ' + (CUR[c] || c)).trim() || '•••••';
   var neg = n < 0, a = Math.abs(n);
   var dec = (c !== 'UZS' || truthy(setv('tiyin'))) && !o.noDec ? 2 : 0;
   if (c !== 'UZS' && !truthy(setv('tiyin')) && Math.round(a) === Math.round(a * 100) / 100) dec = 0;
@@ -476,7 +481,7 @@ function fmt(n, c, o) {
   return left ? sign + sym + (sym.length > 1 ? ' ' : '') + num : sign + num + ' ' + sym;
 }
 function short(n, c) {
-  if (S.hide) return '•••';
+  if (hid()) return '•••';
   c = c || base(); var a = Math.abs(n), sgn = n < 0 ? '−' : '';
   if (c === 'UZS') {
     if (a >= 1e9) return sgn + (a / 1e9).toFixed(1).replace('.', ',') + ' mlrd';
@@ -649,11 +654,11 @@ function persCash() { var b = balances(), t = 0; D.accounts.forEach(function (a)
 function netWorth() { var d = debtTotals(); return persCash() + (d.berdim || 0) - (d.oldim || 0); }
 function hasDebts() { return (D.debts || []).some(debtOpen); }
 // d sanasi oxiridagi sof boylik (grafik va oylik o'zgarish uchun)
-function nwSeries(days) {
-  var net = {}, now = netWorth(), out = [], t0 = Date.now();
+function nwSeries(days, cashOnly) {
+  var net = {}, now = cashOnly ? persCash() : netWorth(), out = [], t0 = Date.now();
   D.transactions.forEach(function (t) { var v = pDelta(t); if (v) net[t.sana] = (net[t.sana] || 0) + v; });
   var pay = {}; (D.payments || []).forEach(function (p) { (pay[p.qarz] = pay[p.qarz] || []).push(p); });
-  (D.debts || []).forEach(function (d) {
+  if (!cashOnly) (D.debts || []).forEach(function (d) {
     // qarz olingan kuni: qarz +, kassaga tushgan pul alohida amal bo'lib yozilgan; shuning uchun sof boylik o'zgarmaydi.
     // To'lov kuni: qarz kamayadi (+), pul chiqimi alohida yozilgan (−). Bu yerda faqat qarz tomonini qo'shamiz.
     var sg = d.turi === 'oldim' ? 1 : -1, ps = pay[d.id] || [];
@@ -665,10 +670,7 @@ function nwSeries(days) {
   for (var i = 0; i < days - 1; i++) { v -= net[ymd(new Date(t0 - i * 864e5))] || 0; out.unshift(v); }
   return out;
 }
-function nwMonthChange() {
-  var net = 0, m = ym(new Date()), d0 = m + '-01';
-  var s = nwSeries(new Date().getDate() + 1); return s[s.length - 1] - s[0];
-}
+function nwMonthChange(cashOnly) { var s = nwSeries(new Date().getDate() + 1, cashOnly); return s[s.length - 1] - s[0]; }
 function sums(m) {
   var r = { inc: 0, exp: 0 };
   pIn(m).forEach(function (t) { if (t.turi === 'kirim') r.inc += txVal(t); else if (t.turi === 'chiqim') r.exp += txVal(t); });
@@ -755,6 +757,7 @@ function syncBack() {
 try { if (GH) google.script.history.setChangeHandler(hbPop); else window.addEventListener('popstate', hbPop); } catch (e) {}
 
 function render() {
+  CTX = null;
   if (!D) return;
   var v = S.sub ? ({ history: vHistory, settings: vSettings, cats: vCats, debts: vDebts, acc: vAcc, review: vReview })[S.sub]() : ({ home: vHome, accounts: vAccounts, stats: vStats, budget: vBudget })[S.tab]();
   $('#app').innerHTML = curWrap(v);
@@ -768,7 +771,7 @@ function afterRender() {
   var c = $('.carousel'), d = $('.dots');
   if (c && d) c.onscroll = function () { var i = Math.round(c.scrollLeft / (c.firstElementChild.offsetWidth + 10)); d.querySelectorAll('i').forEach(function (x, k) { x.className = k === i ? 'on' : ''; }); };
   var e = $('[data-count]');
-  if (e && !afterRender.done && !S.hide) {
+  if (e && !afterRender.done && !S.hide && e.textContent.indexOf('•') < 0) {
     afterRender.done = true;
     var to = Number(e.dataset.count), cur = e.dataset.cur, t0 = performance.now();
     var step = function (t) { var k = Math.min(1, (t - t0) / 750), v = to * (1 - Math.pow(1 - k, 3)); e.innerHTML = curWrap('>' + fmt(k < 1 ? Math.round(v) : to, cur) + '<').slice(1, -1); if (k < 1) requestAnimationFrame(step); };
@@ -812,17 +815,32 @@ function userName() { return setv('ism') || (TG && TG.initDataUnsafe && TG.initD
 function vHome() {
   var m = ym(new Date()), s = sums(m), tot = netWorth(), b = base(), dt = debtTotals(), cash = persCash();
   var ins = insight(), fc = forecast(m), nm = userName();
-  var mch = D.transactions.length ? nwMonthChange() : null;
+  var mch = D.transactions.length ? nwMonthChange(true) : null;
   var h = '<div class="hdr"><div class="row" style="gap:11px"><button class="avatar" data-a="sub" data-v="settings" aria-label="Sozlamalar" style="background:none;padding:0">' + logo(44) + '</button><div><div class="sub b">' + greet() + '</div><div style="font-size:19px;font-weight:800;letter-spacing:-.4px">' + esc(nm || 'Moliya') + '</div></div></div>' +
     '<div class="row" style="gap:8px"><button class="orb o44" data-a="hideAmt" aria-label="Summalarni yashirish">' + ic(S.hide ? 'eyeoff' : 'eye', 19) + '</button><button class="orb o44" data-a="flipTheme" aria-label="Mavzuni almashtirish">' + ic(THEMES[setv('mavzu') || 'tizim'][0], 19) + '</button></div></div>';
-  h += '<div class="wrap"><div class="hero" data-a="nwInfo" style="cursor:pointer"><div class="between"><span class="lbl">Sof boylik · shaxsiy</span>' + (mch !== null && Math.round(mch) && !S.hide ? '<span class="tag">' + ic(mch >= 0 ? 'up2' : 'dn2', 13, 2.6) + ' ' + (mch >= 0 ? '+' : '−') + short(Math.abs(mch)) + ' bu oy</span>' : '') + '</div>' +
-    '<div class="big" data-count="' + Math.round(tot) + '" data-cur="' + b + '">' + fmt(tot, b) + '</div><div class="lbl">Pul ' + short(cash) + (dt.oldim ? ' · Qarzlar −' + short(dt.oldim) : '') + (dt.berdim ? ' · Sizga qarz +' + short(dt.berdim) : '') + '</div>' +
-    '<div style="margin:8px -20px 0">' + spark(tot) + '</div>' +
+  CTX = 'cash';
+  h += '<div class="wrap"><div class="hero"><div class="between"><span class="lbl row" style="gap:8px">Shaxsiy pul ' + eyeBtn('cash', true) + '</span>' + (mch !== null && Math.round(mch) && !hid() ? '<span class="tag">' + ic(mch >= 0 ? 'up2' : 'dn2', 13, 2.6) + ' ' + (mch >= 0 ? '+' : '−') + short(Math.abs(mch)) + ' bu oy</span>' : '') + '</div>' +
+    '<div class="big" data-count="' + Math.round(cash) + '" data-cur="' + b + '">' + fmt(cash, b) + '</div><div class="lbl">' + D.accounts.filter(function (a) { return isPers(a) && isActive(a); }).length + ' ta shaxsiy hisob · biznes kirmaydi</div>' +
+    '<div style="margin:8px -20px 0">' + spark(cash) + '</div>' +
     '<div class="row" style="gap:10px;margin-top:2px"><div class="pill"><div class="lbl small row" style="gap:5px">' + ic('dn2', 13, 2.6) + MONTHS[new Date().getMonth()] + ' kirim</div><div class="xb" style="font-size:17px;margin-top:2px">+' + short(s.inc) + '</div></div>' +
     '<div class="pill"><div class="lbl small row" style="gap:5px">' + ic('up2', 13, 2.6) + MONTHS[new Date().getMonth()] + ' chiqim</div><div class="xb" style="font-size:17px;margin-top:2px">−' + short(s.exp) + '</div></div></div></div>';
+  CTX = null;
   h += '<div class="quick">' + [['chiqim', 'down', 'Xarajat'], ['kirim', 'up', 'Daromad'], ['otkazma', 'swap', "O'tkazma"], ['hist', 'list', 'Tarix']].map(function (q) {
     return '<button data-a="quick" data-v="' + q[0] + '"><span class="orb">' + ic(q[1], 22, 2.2) + '</span>' + q[2] + '</button>';
   }).join('') + '</div>';
+  // Qarzlar: alohida karta (5.1.1). Sof boylik shu yerda ko'rinadi
+  if (dt.n) {
+    CTX = 'debt';
+    var open = (D.debts || []).filter(debtOpen), all = 0, paid = 0, big = null;
+    open.forEach(function (d) { var c = d.valyuta || 'UZS', sm = conv(Number(d.summa) || 0, c), l = conv(Math.max(0, debtLeft(d)), c); if (d.turi !== 'oldim') return; all += sm; paid += sm - l; if (!big || l > big.l) big = { n: d.ism, l: l }; });
+    var pp = all ? paid / all : 0;
+    h += '<div class="glass card" style="margin-top:14px;position:relative">' + eyeBtn('debt', false, 'position:absolute;top:18px;right:46px;z-index:2') + '<button data-a="planGo" data-v="debt" style="display:block;width:100%;text-align:left;background:none;border:0;padding:0;color:inherit">' +
+      '<div class="between"><span class="row" style="gap:10px"><span class="orb o40" style="background:rgba(196,43,60,.1);color:var(--red)">' + ic('hand', 18) + '</span><span style="padding-right:44px"><span class="b">Qarzlar</span><div class="muted small">' + dt.n + ' ta ochiq' + (big ? ' · eng kattasi ' + esc(big.n) + ' ' + short(big.l) : '') + '</div></span></span>' + ic('chev', 16) + '</div>' +
+      '<div class="between" style="margin-top:12px;align-items:flex-end"><div class="xb exp" style="font-size:26px">' + (dt.oldim ? '−' + fmt(dt.oldim, b) : fmt(0, b)) + '</div>' + (dt.berdim ? '<div class="small inc b">Sizga qarz +' + short(dt.berdim) + '</div>' : '') + '</div>' +
+      (all ? '<div class="bar" style="margin:10px 0 6px;height:8px"><i style="width:' + Math.min(100, pp * 100) + '%"></i></div><div class="muted small">' + Math.round(pp * 100) + '% to\'langan · ' + short(paid) + ' / ' + short(all) + '</div>' : '') + '</button>' +
+      '<button data-a="nwInfo" class="between" style="width:100%;margin-top:12px;padding:12px 0 0;border:0;border-top:1px solid var(--line,rgba(11,21,48,.08));background:none;color:inherit;text-align:left"><span class="muted">Sof boylik (pul − qarzlar)</span><span class="b ' + (tot < 0 ? 'exp' : 'inc') + '">' + fmt(tot, b) + '</span></button></div>';
+    CTX = null;
+  }
   // Muhim kartalar bitta aylanuvchi qatorda
   var slides = [], x;
   if (ins) slides.push('<div class="glass card row" style="align-items:flex-start"><span class="orb o40" style="' + (ins.warn ? 'background:rgba(196,43,60,.1);color:var(--red)' : '') + '">' + ic(ins.warn ? 'alert' : 'spark', 18) + '</span><div style="min-width:0"><div class="b">' + esc(ins.t) + '</div><div class="muted" style="margin-top:2px">' + esc(ins.s) + '</div></div></div>');
@@ -835,14 +853,16 @@ function vHome() {
     due.slice(0, 3).map(function (r) { return '<div class="li"><span class="mid"><div class="t">' + esc(r.nomi) + '</div><div class="s ' + (r.keyingi < today() ? 'exp' : '') + '">' + dueLabel(r.keyingi) + ' · ' + fmt(r.summa, accById(r.hisob).valyuta) + '</div></span><button class="chip btn-pri" style="height:34px" data-a="recPay" data-v="' + r.id + '">To\'lash</button></div>'; }).join('') + '</div>';
   if (h) { slides.push(h); h = ''; }
   if (fc) {
-    h += '<button class="glass card" data-a="tab" data-v="budget" style="display:block;width:100%;text-align:left;border:1px solid var(--glass-b)"><div class="between"><span class="b">Oylik byudjet</span><span class="muted"><b style="color:var(--ink)">' + short(fc.spent) + '</b> / ' + short(fc.lim) + '</span></div>' +
+    CTX = 'budget';
+    h += '<div style="position:relative">' + eyeBtn('budget', false, 'position:absolute;top:13px;left:130px;z-index:2') + '<button class="glass card" data-a="tab" data-v="budget" style="display:block;width:100%;text-align:left;border:1px solid var(--glass-b)"><div class="between"><span class="b">Oylik byudjet</span><span class="muted"><b style="color:var(--ink)">' + short(fc.spent) + '</b> / ' + short(fc.lim) + '</span></div>' +
       '<div class="bar" style="margin:10px 0 8px"><i style="width:' + Math.min(100, fc.p * 100) + '%;' + (barColor(fc.p) ? 'background:' + barColor(fc.p) : '') + '"></i></div>' +
-      '<div class="muted small">' + (fc.p >= 1 ? 'Limitdan ' + fmt(fc.spent - fc.lim) + ' oshdi' : fc.left > 0 ? 'Kuniga ' + fmt(fc.perDay) + ' gacha sarflasangiz, oy oxirigacha yetadi' : 'Oy yakunlandi') + '</div></button>';
+      '<div class="muted small">' + (fc.p >= 1 ? 'Limitdan ' + fmt(fc.spent - fc.lim) + ' oshdi' : fc.left > 0 ? 'Kuniga ' + fmt(fc.perDay) + ' gacha sarflasangiz, oy oxirigacha yetadi' : 'Oy yakunlandi') + '</div></button></div>';
+    CTX = null;
   } else if (D.transactions.length) {
     h += '<button class="glass card between" data-a="editBudget" data-v="__total" style="width:100%;border:1px solid var(--glass-b);text-align:left"><span><span class="b">Oylik byudjet qo\'ying</span><div class="muted small">Limit va prognozni ko\'rasiz</div></span>' + ic('chev') + '</button>';
   }
   if (h) { slides.push(h); h = ''; }
-  var dsum = debtTotals();
+  var dsum = { n: 0 };
   if (dsum.n) h += '<button class="glass card" data-a="planGo" data-v="debt" style="display:block;width:100%;text-align:left;border:1px solid var(--glass-b)"><div class="between" style="margin-bottom:10px"><span class="row" style="gap:10px"><span class="orb o40">' + ic('hand', 18) + '</span><span class="b">Qarzlar</span></span><span class="muted small row" style="gap:4px">' + dsum.n + ' ta ochiq' + ic('chev', 14) + '</span></div>' +
     '<div class="grid2"><div><div class="muted small">Men qarzdorman</div><div class="xb exp" style="font-size:17px">' + short(dsum.oldim) + '</div></div><div><div class="muted small">Menga qarzdor</div><div class="xb inc" style="font-size:17px">' + short(dsum.berdim) + '</div></div></div></button>';
   if (h) { slides.push(h); h = ''; }
@@ -871,7 +891,7 @@ function spark(tot, accId) {
     if (accId) { var d = accDelta(t, accId); if (d) net[t.sana] = (net[t.sana] || 0) + d; return; }
   });
   var pts = [tot];
-  if (!accId) pts = nwSeries(n);
+  if (!accId) pts = nwSeries(n, true);
   else for (var i = 0; i < n - 1; i++) pts.unshift(pts[0] - (net[ymd(new Date(t0 - i * 864e5))] || 0));
   var mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), r = mx - mn || 1;
   var xy = pts.map(function (v, i) { return (i * 300 / (n - 1)).toFixed(1) + ' ' + (50 - (v - mn) / r * 40).toFixed(1); });
@@ -890,12 +910,16 @@ function vAccounts() {
   });
   var inactive = D.accounts.filter(function (a) { return !isActive(a); });
   var h = '<div class="hdr"><h1>Hisoblar</h1><div class="row" style="gap:10px"><button class="orb o44" data-a="quick" data-v="otkazma" aria-label="O\'tkazma">' + ic('swap') + '</button><button class="orb o44 dark" data-a="editAcc" aria-label="Yangi hisob">' + ic('plus', 20, 2.4) + '</button></div></div><div class="wrap">';
-  h += '<div class="hero" style="padding:16px 20px"><div class="lbl">Shaxsiy pul · ' + activeAccs().filter(inTotal).length + ' ta hisob</div><div class="big" style="font-size:30px">' + fmt(pos + neg) + '</div>' + (hasDebts() ? '<div class="lbl">Qarzlar ayirilgandagi sof boylik: ' + fmt(netWorth()) + '</div>' : '') + '</div>';
+  CTX = 'cash';
+  h += '<div class="hero" style="padding:16px 20px"><div class="lbl row" style="gap:8px">' + eyeBtn('cash', true) + ' Shaxsiy pul · ' + activeAccs().filter(inTotal).length + ' ta hisob</div><div class="big" style="font-size:30px">' + fmt(pos + neg) + '</div>' + (hasDebts() ? '<div class="lbl">Qarzlar ayirilgandagi sof boylik: ' + fmt(netWorth()) + '</div>' : '') + '</div>';
   h += '<div class="grid2" style="margin-top:12px"><div class="glass card" style="margin:0"><div class="muted small">Ijobiy qoldiq</div><div class="xb inc" style="font-size:18px">' + short(pos) + '</div></div><div class="glass card" style="margin:0"><div class="muted small">Minusdagi hisoblar</div><div class="xb ' + (neg < 0 ? 'exp' : '') + '" style="font-size:18px">' + short(neg) + '</div></div></div>';
+  CTX = null;
   order.forEach(function (g) {
     var tot = 0; groups[g].forEach(function (a) { tot += conv(b[a.id] || 0, a.valyuta); });
-    h += '<div class="label-up between"><span>' + esc(g) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div><div class="glass list">' +
+    CTX = 'grp_' + g;
+    h += '<div class="label-up between"><span class="row" style="gap:8px">' + esc(g) + eyeBtn('grp_' + g) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div><div class="glass list">' +
       groups[g].map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
+    CTX = null;
   });
   if (bizOrder.length) {
     var mm = ym(new Date());
@@ -904,9 +928,11 @@ function vAccounts() {
       var tot = 0, inc = 0, exp = 0, ids = {};
       groups[g].forEach(function (a) { tot += conv(b[a.id] || 0, a.valyuta); ids[a.id] = 1; });
       txIn(mm).forEach(function (t) { if (!ids[t.hisob] || t.turi === 'otkazma') return; if (t.turi === 'kirim') inc += txVal(t); else exp += txVal(t); });
-      h += '<div class="label-up between"><span>' + esc(g.slice(1)) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div>' +
+      CTX = 'grp_' + g;
+      h += '<div class="label-up between"><span class="row" style="gap:8px">' + esc(g.slice(1)) + eyeBtn('grp_' + g) + '</span><span class="' + (tot < 0 ? 'exp' : 'inc') + '" style="letter-spacing:0;text-transform:none">' + fmt(tot) + '</span></div>' +
         '<div class="muted small" style="margin:-4px 4px 6px">' + MONTHS[new Date().getMonth()] + ': kirim +' + short(inc) + ' · chiqim −' + short(exp) + ' · natija ' + (inc - exp >= 0 ? '+' : '−') + short(Math.abs(inc - exp)) + '</div>' +
         '<div class="glass list">' + groups[g].map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
+      CTX = null;
     });
   }
   if (inactive.length) h += '<div class="label-up">Faol emas</div><div class="glass list dim">' + inactive.map(function (a) { return accRow(a, b[a.id] || 0); }).join('') + '</div>';
@@ -916,13 +942,14 @@ function accRow(a, bal) {
   return '<button class="li" data-a="accOpen" data-v="' + a.id + '"><span class="orb o44">' + ic(a.belgi || 'wallet') + '</span><span class="mid"><div class="t">' + esc(a.nomi) + '</div><div class="s">' + (ACC_TYPES[a.turi] || a.turi) + ' · ' + a.valyuta + '</div></span><span class="amt ' + (bal < 0 ? 'exp' : '') + '">' + fmt(bal, a.valyuta) + '</span></button>';
 }
 
-function vAcc() {
+function vAcc() { CTX = 'acc_' + S.accId; try { return vAcc0(); } finally { CTX = null; } }
+function vAcc0() {
   if (!D.accounts.some(function (x) { return x.id === S.accId; })) { S.sub = null; return vAccounts(); }
   var a = accById(S.accId), id = a.id, bal = balances()[id] || 0, m = ym(new Date()), inc = 0, out = 0;
   var list = sortTx(D.transactions.filter(function (t) { return t.hisob === id || t.hisobga === id; }));
   list.forEach(function (t) { if (t.sana.slice(0, 7) !== m) return; var d = accDelta(t, id); if (d > 0) inc += d; else out -= d; });
   var h = subHdr(esc(a.nomi), '<button class="orb o44" data-a="editAcc" data-v="' + id + '" aria-label="Tahrirlash">' + ic('tag', 19) + '</button>') + '<div class="wrap">';
-  h += '<div class="hero"><div class="between"><span class="lbl">Hisob qoldig\'i</span><span class="tag">' + ic(a.belgi || 'wallet', 13) + ' ' + esc((ACC_TYPES[a.turi] || a.turi) + ' · ' + a.valyuta) + '</span></div>' +
+  h += '<div class="hero"><div class="between"><span class="lbl row" style="gap:8px">Hisob qoldig\'i ' + eyeBtn('acc_' + id, true) + '</span><span class="tag">' + ic(a.belgi || 'wallet', 13) + ' ' + esc((ACC_TYPES[a.turi] || a.turi) + ' · ' + a.valyuta) + '</span></div>' +
     '<div class="big">' + fmt(bal, a.valyuta) + '</div><div class="lbl">' + esc(a.guruh || 'Shaxsiy') + (inTotal(a) ? '' : ' · umumiy balansga kirmaydi') + (isActive(a) ? '' : ' · faol emas') + '</div>' +
     '<div style="margin:8px -20px 0">' + spark(bal, id) + '</div>' +
     '<div class="row" style="gap:10px;margin-top:2px"><div class="pill"><div class="lbl small row" style="gap:5px">' + ic('dn2', 13, 2.6) + MONTHS[new Date().getMonth()] + ' kirdi</div><div class="xb" style="font-size:17px;margin-top:2px">+' + short(inc, a.valyuta) + '</div></div>' +
@@ -2044,6 +2071,7 @@ var act = {
     if (bioOn()) { store('moliya_bio', null); toast('Barmoq izi/yuz o\'chirildi'); return render(); }
     bioRegister().then(function () { toast('Barmoq izi/yuz yoqildi'); render(); }).catch(function (e) { toast('Yoqilmadi: telefonda ekran qulfi (barmoq izi yoki yuz) sozlanganini tekshiring', 4500); });
   },
+  hideCard: function (k) { if (S.hide) { S.hide = false; try { localStorage.setItem('moliya_hide', '0'); } catch (e) {} } if (HC[k]) delete HC[k]; else HC[k] = 1; try { localStorage.setItem('moliya_hidec', JSON.stringify(HC)); } catch (e) {} haptic(); render(); },
   hideAmt: function () { S.hide = !S.hide; try { localStorage.setItem('moliya_hide', S.hide ? '1' : '0'); } catch (e) {} haptic(); render(); toast(S.hide ? 'Summalar yashirildi' : 'Summalar ko\'rsatildi', 1400); },
   flipTheme: function () { var order = ['tizim', 'yorug', 'tungi'], n = order[(order.indexOf(setv('mavzu') || 'tizim') + 1) % 3]; act.setTheme(n); toast('Mavzu: ' + THEMES[n][1], 1500); },
   setTheme: function (v) { D.settings.mavzu = v; applyTheme(); closeSheet(); render(); api('saveSettings', { mavzu: v }); },
